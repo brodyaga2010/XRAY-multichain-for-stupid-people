@@ -29,6 +29,13 @@ if [ ! -f "sni_relay.json" ]; then
 fi
 
 
+# Check for sni_exit.json file
+if [ ! -f "sni_exit.json" ]; then
+    echo "Error: sni_exit.json file not found in current directory."
+    echo "Please create sni_exit.json containing a JSON array of server names."
+    exit 1
+fi
+
 # Read and validate sni_relay.json
 SNI_ARRAY_RELAY=$(cat sni_relay.json | tr -d '\n\r')
 if ! echo "$SNI_ARRAY_RELAY" | jq -e . >/dev/null 2>&1; then
@@ -172,7 +179,6 @@ cat > /tmp/relay_config.json <<EOF
       "tag": "user-inbound-xhttp",
       "settings": {
         "clients": [{"id": "$FIRST_USER_UUID", "flow": ""}],
-        ],
         "decryption": "none"
       },
       "streamSettings": {
@@ -216,7 +222,7 @@ cat > /tmp/relay_config.json <<EOF
         "network": "tcp",
         "security": "reality",
         "realitySettings": {
-          "serverName": ${EXIT_DEST},
+          "serverName": "${EXIT_DEST}",
           "fingerprint": "chrome",
           "shortId": "$EXIT_SHORT",
           "publicKey": "$EXIT_PUB"
@@ -235,6 +241,7 @@ cat > /tmp/relay_config.json <<EOF
     ]
   }
 }
+EOF
 
 echo ""
 echo "============================================"
@@ -279,8 +286,8 @@ restart_xray "$RELAY_IP" "$RELAY_USER" "$RELAY_PASS" "Relay server"
 restart_xray "$EXIT_IP" "$EXIT_USER" "$EXIT_PASS" "Exit server"
 
 # Generate VLESS link for the first user
-VLESS_LINK1="vless://${FIRST_USER_UUID}@${RELAY_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.google.com&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}#FirstUser"
-VLESS_LINK2="vless://${FIRST_USER_UUID}@${RELAY_IP}:8443?encryption=none&flow=&security=reality&sni=www.google.com&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}#FirstUser"
+VLESS_LINK1="vless://${FIRST_USER_UUID}@${RELAY_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${RELAY_DEST}&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}#FirstUser"
+VLESS_LINK2="vless://${FIRST_USER_UUID}@${RELAY_IP}:80?encryption=none&security=reality&sni=${RELAY_DEST}&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}#FirstUser"
 
 echo ""
 echo "============================================"
@@ -291,5 +298,5 @@ echo "$VLESS_LINK1"
 echo "$VLESS_LINK2"
 echo ""
 echo "Tunnel active: users connecting to $RELAY_IP will exit via $EXIT_IP."
-echo "To add more users, run: ./add_user.sh $RELAY_IP $RELAY_USER <pass>"
+echo "To add more users, run: ./add_user_relay.sh $RELAY_IP $RELAY_USER <pass> <name> <sni>"
 echo "============================================"

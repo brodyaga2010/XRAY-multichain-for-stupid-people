@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+.pytest_cache/
+*.egg-info/
+.venv/
+
+# Frontend
+node_modules/
+dist/
+
+# Local deploy secrets/env
+deploy/.env
+deploy/secrets/
+
+# OS/editor
+.DS_Store
+Thumbs.db

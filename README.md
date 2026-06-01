@@ -81,3 +81,30 @@ All scripts use `sshpass` (password‑based SSH). For production, switch to SSH 
 
 ## Connection
 Use AmneziaVPN, copy generated connection string to 'InsertKey' field and press connect.
+
+---
+
+## Web Control Plane
+
+This repository now also contains a web control plane in separate folders:
+
+- `backend/` - FastAPI API, Postgres models, Alembic migrations, JWT cookie auth, Xray SSH manager.
+- `frontend/` - React + Vite dashboard for users and administrators.
+- `deploy/` - Docker Compose for Postgres, backend, and frontend.
+
+Local dry-run start:
+
+```bash
+cd deploy
+cp .env.example .env
+mkdir -p secrets
+printf "dry-run" > secrets/xray_ssh_key
+docker compose up --build
+```
+
+Open `http://localhost:5173`.
+
+For production, set `XRAY_DRY_RUN=false`, put a relay SSH private key into
+`deploy/secrets/xray_ssh_key`, and configure `XRAY_RELAY_HOST`.
+
+Full documentation: [`docs/WEB_CONTROL_PLANE.md`](docs/WEB_CONTROL_PLANE.md).
