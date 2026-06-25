@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Activity, Clock3, KeyRound, ShieldAlert, Users } from "lucide-react";
 import { api, User, VpnKey } from "../api";
 import { KeyTable } from "../components/KeyTable";
-import { SearchBox } from "../components/SearchBox";
 import { StatCard } from "../components/StatCard";
 import { Status } from "../components/Status";
 import { formatDate, matchesSearch } from "../utils";
@@ -10,7 +9,6 @@ import { formatDate, matchesSearch } from "../utils";
 export function AdminDashboard({ setError }: { setError: (error: string) => void }) {
   const [users, setUsers] = useState<User[]>([]);
   const [keys, setKeys] = useState<VpnKey[]>([]);
-  const [keyQuery, setKeyQuery] = useState("");
 
   useEffect(() => {
     Promise.all([api.adminUsers(), api.adminKeys()])
@@ -28,11 +26,6 @@ export function AdminDashboard({ setError }: { setError: (error: string) => void
     const totalCapacity = users.reduce((sum, user) => sum + user.key_limit, 0);
     return { activeKeys, pendingUsers, suspendedUsers, totalCapacity };
   }, [users, keys]);
-
-  const filteredKeys = useMemo(
-    () => keys.filter((key) => matchesSearch([key.name, key.uuid, key.sni, key.type, key.status], keyQuery)),
-    [keys, keyQuery]
-  );
 
   const recentUsers = users.slice(0, 5);
 
@@ -64,18 +57,6 @@ export function AdminDashboard({ setError }: { setError: (error: string) => void
         </div>
       </section>
 
-      <section className="dashboard-keys">
-        <div className="toolbar-panel">
-          <SearchBox value={keyQuery} onChange={setKeyQuery} placeholder="Search all keys..." />
-        </div>
-        <KeyTable
-          keys={filteredKeys}
-          onRevoke={async (id) => {
-            await api.adminRevokeKey(id);
-            setKeys(await api.adminKeys());
-          }}
-        />
-      </section>
     </div>
   );
 }

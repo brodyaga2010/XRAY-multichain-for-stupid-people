@@ -1,16 +1,18 @@
 import { FormEvent, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { KeyType, User } from "../api";
 
 export function CreateKeyForm({
   user,
   activeCount,
   compact = false,
+  onClose,
   onCreate
 }: {
   user: User;
   activeCount?: number;
   compact?: boolean;
+  onClose?: () => void;
   onCreate: (payload: { name: string; type: KeyType; sni?: string }) => Promise<void>;
 }) {
   const [name, setName] = useState("");
@@ -34,6 +36,23 @@ export function CreateKeyForm({
             <span>
               {activeCount}/{user.key_limit} active
             </span>
+          )}
+        </div>
+      )}
+      {compact && (
+        <div className="inline-create-head">
+          <div>
+            <h3>Create key</h3>
+            {activeCount !== undefined && (
+              <span>
+                {activeCount}/{user.key_limit} active
+              </span>
+            )}
+          </div>
+          {onClose && (
+            <button className="icon-button" type="button" onClick={onClose} aria-label="Close create key form">
+              <X size={16} />
+            </button>
           )}
         </div>
       )}
