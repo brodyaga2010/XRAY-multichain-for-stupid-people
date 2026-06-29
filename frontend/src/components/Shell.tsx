@@ -83,13 +83,22 @@ export function Shell({ user, onUserChange }: { user: User; onUserChange: (user:
           <button className="icon-button menu-launcher" onClick={() => setMenuOpen(true)} title="Open menu">
             <Menu size={18} />
           </button>
-          <div>
-            <p className="eyebrow">{user.role === "admin" ? "Administrator" : "VPN access"}</p>
-            <h1>{titleFor(view, user)}</h1>
+          <div className="topbar-copy">
+            <div className="topbar-head">
+              <h1>{titleFor(view, user)}</h1>
+              <span className={`status mobile-session ${user.role === "admin" ? "approved" : "active"}`}>
+                {user.role === "admin" ? "Admin" : "Approved"}
+              </span>
+            </div>
           </div>
           <div className="account">
-            <span>{user.email}</span>
-            <button className="icon-button" title="Logout" onClick={logout}>
+            <div className="account-meta">
+              <span>{user.email}</span>
+              <span className={`status ${user.role === "admin" ? "approved" : "active"}`}>
+                {user.role === "admin" ? "Admin" : "Approved"}
+              </span>
+            </div>
+            <button className="icon-button account-logout" title="Logout" onClick={logout}>
               <LogOut size={18} />
             </button>
           </div>
@@ -118,7 +127,7 @@ export function Shell({ user, onUserChange }: { user: User; onUserChange: (user:
 }
 
 function titleFor(view: AppView, user: User) {
-  if (view === "dashboard") return "Control dashboard";
-  if (view === "admin") return "Users and approvals";
-  return user.role === "admin" ? "All VPN keys" : "Your VPN keys";
+  if (view === "dashboard") return "Dashboard";
+  if (view === "admin") return "Users";
+  return "Keys";
 }

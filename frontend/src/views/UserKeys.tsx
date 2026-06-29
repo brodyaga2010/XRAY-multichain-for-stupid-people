@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { KeyRound, Users } from "lucide-react";
+import { EyeOff, Eye, KeyRound, Users } from "lucide-react";
 import { api, User, VpnKey } from "../api";
 import { CreateKeyForm } from "../components/CreateKeyForm";
 import { KeyTable } from "../components/KeyTable";
 import { SearchBox } from "../components/SearchBox";
 import { StatCard } from "../components/StatCard";
+import { useMediaQuery } from "../hooks";
 import { matchesSearch } from "../utils";
 
 export function UserKeys({
@@ -19,6 +20,8 @@ export function UserKeys({
   const [keys, setKeys] = useState<VpnKey[]>([]);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showWidgets, setShowWidgets] = useState(true);
+  const isMobile = useMediaQuery("(max-width: 820px)");
   const activeCount = useMemo(() => keys.filter((key) => key.status === "active").length, [keys]);
   const filteredKeys = useMemo(
     () => keys.filter((key) => matchesSearch([key.name, key.type, key.sni, key.status, key.uuid], query)),
@@ -60,31 +63,45 @@ export function UserKeys({
 
   return (
     <div className="stack">
-      <div className="metrics-strip non-dashboard-metrics">
-        <StatCard label="Active keys" value={activeCount} helper="Currently usable" icon={KeyRound} tone="good" />
-        <StatCard
-          label={isAdmin ? "Total keys" : "Key limit"}
-          value={isAdmin ? keys.length : `${activeCount}/${user.key_limit}`}
-          helper={isAdmin ? "Across all users" : "Your active quota"}
-          icon={Users}
-        />
-      </div>
+      {showWidgets && (
+        <div className="metrics-strip non-dashboard-metrics collapsible-widgets">
+          <StatCard label="Active keys" value={activeCount} helper="Currently usable" icon={KeyRound} tone="good" />
+          <StatCard
+            label={isAdmin ? "Total keys" : "Key limit"}
+            value={isAdmin ? keys.length : `${activeCount}/${user.key_limit}`}
+            helper={isAdmin ? "Across all users" : "Your active quota"}
+            icon={Users}
+          />
+        </div>
+      )}
       {!isAdmin ? (
         <div className="key-workspace">
-          <CreateKeyForm user={user} activeCount={activeCount} onCreate={createKey} />
+          {showWidgets && <CreateKeyForm user={user} activeCount={activeCount} onCreate={createKey} />}
           <div className="stack">
-            <div className="toolbar-panel">
-              <SearchBox value={query} onChange={setQuery} placeholder="Search keys by name, SNI, UUID, type..." />
-              {busy && <span className="muted">Updating...</span>}
+            <div className="toolbar-panel sticky-toolbar">
+              <SearchBox value={query} onChange={setQuery} placeholder={isMobile ? "Search keys" : "Search keys by name, SNI, UUID, type..."} />
+              <div className="toolbar-actions">
+                {busy && <span className="muted">Updating...</span>}
+                <button className="small ghost widgets-toggle" type="button" onClick={() => setShowWidgets((current) => !current)}>
+                  {showWidgets ? <EyeOff size={15} /> : <Eye size={15} />}
+                  <span>{showWidgets ? "Hide widgets" : "Show widgets"}</span>
+                </button>
+              </div>
             </div>
             <KeyTable keys={filteredKeys} onRevoke={revoke} />
           </div>
         </div>
       ) : (
         <>
-          <div className="toolbar-panel">
-            <SearchBox value={query} onChange={setQuery} placeholder="Search keys by name, SNI, UUID, type..." />
-            {busy && <span className="muted">Updating...</span>}
+          <div className="toolbar-panel sticky-toolbar">
+            <SearchBox value={query} onChange={setQuery} placeholder={isMobile ? "Search keys" : "Search keys by name, SNI, UUID, type..."} />
+            <div className="toolbar-actions">
+              {busy && <span className="muted">Updating...</span>}
+              <button className="small ghost widgets-toggle" type="button" onClick={() => setShowWidgets((current) => !current)}>
+                {showWidgets ? <EyeOff size={15} /> : <Eye size={15} />}
+                <span>{showWidgets ? "Hide widgets" : "Show widgets"}</span>
+              </button>
+            </div>
           </div>
           <KeyTable keys={filteredKeys} onRevoke={revoke} />
         </>

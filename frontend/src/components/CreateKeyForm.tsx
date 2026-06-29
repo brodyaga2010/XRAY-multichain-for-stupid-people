@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { ChevronDown, Plus, X } from "lucide-react";
 import { KeyType, User } from "../api";
 
 export function CreateKeyForm({
@@ -57,10 +57,13 @@ export function CreateKeyForm({
         </div>
       )}
       <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Device name" required />
-      <select value={type} onChange={(event) => setType(event.target.value as KeyType)}>
-        <option value="tcp_reality">TCP REALITY</option>
-        <option value="xhttp_reality">XHTTP REALITY</option>
-      </select>
+      <div className="select-field">
+        <select aria-label="Key type" value={type} onChange={(event) => setType(event.target.value as KeyType)}>
+          <option value="tcp_reality">TCP REALITY</option>
+          <option value="xhttp_reality">XHTTP REALITY</option>
+        </select>
+        <ChevronDown size={16} />
+      </div>
       <input value={sni} onChange={(event) => setSni(event.target.value)} placeholder="Default SNI" />
       <button className="primary" disabled={limitReached}>
         <Plus size={17} /> Create key

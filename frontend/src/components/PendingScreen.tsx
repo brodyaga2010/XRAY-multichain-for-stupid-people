@@ -8,6 +8,7 @@ export function PendingScreen({ user, onLogout }: { user: User; onLogout: () => 
         <CheckCircle2 size={40} />
         <h1>Waiting for administrator approval</h1>
         <p>{user.email} is registered. Access opens after approval.</p>
+        <div className="pending-note">You will be able to create and manage VPN keys as soon as the account status changes to approved.</div>
         <button className="ghost" onClick={onLogout}>
           Logout
         </button>

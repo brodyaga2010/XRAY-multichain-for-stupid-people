@@ -52,9 +52,8 @@ export function KeyTable({ keys, onRevoke }: { keys: VpnKey[]; onRevoke: (id: nu
         <table>
           <thead>
             <tr>
-              <th>Name</th>
+              <th>Key</th>
               <th>Type</th>
-              <th>SNI</th>
               <th>Status</th>
               <th>Created</th>
               <th></th>
@@ -63,9 +62,15 @@ export function KeyTable({ keys, onRevoke }: { keys: VpnKey[]; onRevoke: (id: nu
           <tbody>
             {visibleKeys.map((key) => (
               <tr key={key.id}>
-                <td data-label="Name">{key.name}</td>
+                <td data-label="Key">
+                  <div className="table-key">
+                    <strong>{key.name}</strong>
+                    <span>
+                      {shortUuid(key.uuid)} / {key.sni || "Default SNI"}
+                    </span>
+                  </div>
+                </td>
                 <td data-label="Type">{key.type === "tcp_reality" ? "TCP REALITY" : "XHTTP REALITY"}</td>
-                <td data-label="SNI">{key.sni}</td>
                 <td data-label="Status">
                   <Status status={key.status} />
                 </td>
@@ -89,7 +94,7 @@ export function KeyTable({ keys, onRevoke }: { keys: VpnKey[]; onRevoke: (id: nu
             ))}
             {visibleKeys.length === 0 && (
               <tr>
-                <td colSpan={6} className="empty">
+                <td colSpan={5} className="empty">
                   No keys match filters
                 </td>
               </tr>
@@ -105,25 +110,25 @@ export function KeyTable({ keys, onRevoke }: { keys: VpnKey[]; onRevoke: (id: nu
                 <strong>{key.name}</strong>
                 <span className="key-card-subtitle">
                   {key.type === "tcp_reality" ? "TCP REALITY" : "XHTTP REALITY"}
-                  {key.sni ? ` • ${key.sni}` : " • No SNI"}
+                  {key.sni ? ` / ${key.sni}` : " / No SNI"}
                 </span>
               </div>
               <Status status={key.status} />
             </div>
             <div className="key-card-meta">Created {formatDate(key.created_at)}</div>
             <div className="key-card-actions">
-              <button className="ghost action-button" onClick={() => navigator.clipboard.writeText(key.connection_uri)}>
+              <button className="ghost action-button icon-only-mobile" title="Copy VLESS link" onClick={() => navigator.clipboard.writeText(key.connection_uri)}>
                 <Copy size={16} />
                 <span>Copy</span>
               </button>
               {key.client_config_json && (
-                <button className="ghost action-button" onClick={() => downloadJson(key)}>
+                <button className="ghost action-button icon-only-mobile" title="Download JSON" onClick={() => downloadJson(key)}>
                   <Download size={16} />
                   <span>JSON</span>
                 </button>
               )}
               {key.status === "active" && (
-                <button className="ghost action-button danger" onClick={() => onRevoke(key.id)}>
+                <button className="ghost action-button danger icon-only-mobile" title="Revoke key" onClick={() => onRevoke(key.id)}>
                   <Trash2 size={16} />
                   <span>Revoke</span>
                 </button>
@@ -135,4 +140,8 @@ export function KeyTable({ keys, onRevoke }: { keys: VpnKey[]; onRevoke: (id: nu
       </div>
     </div>
   );
+}
+
+function shortUuid(value: string) {
+  return value.slice(0, 8);
 }

@@ -31,8 +31,8 @@ export function AuthScreen({ onAuthed }: { onAuthed: (user: User) => void }) {
           <ShieldCheck size={28} />
           <span>Xray Control</span>
         </div>
-        <h1>VPN access that stays organized from phone to desktop.</h1>
-        <p>Request approval, manage your keys, and keep every access decision visible.</p>
+        <h1>Manage VPN access.</h1>
+        <p>Sign in or request approval.</p>
       </section>
       <form className="auth-panel animate-in delay-1" onSubmit={submit}>
         <div className="segmented">

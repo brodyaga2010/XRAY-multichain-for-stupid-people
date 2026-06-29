@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Clock3, Plus, ShieldAlert, Users } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronRight, Clock3, Eye, EyeOff, Plus, ShieldAlert, Users } from "lucide-react";
 import { api, User, VpnKey } from "../api";
 import { CreateKeyForm } from "../components/CreateKeyForm";
 import { KeyTable } from "../components/KeyTable";
@@ -7,7 +7,7 @@ import { SearchBox } from "../components/SearchBox";
 import { StatCard } from "../components/StatCard";
 import { Status } from "../components/Status";
 import { useMediaQuery } from "../hooks";
-import { matchesSearch } from "../utils";
+import { formatDate, matchesSearch } from "../utils";
 
 export function AdminUsers({
   currentUser,
@@ -21,6 +21,7 @@ export function AdminUsers({
   const [keys, setKeys] = useState<VpnKey[]>([]);
   const [query, setQuery] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [showWidgets, setShowWidgets] = useState(true);
   const isMobile = useMediaQuery("(max-width: 820px)");
 
   const filteredUsers = useMemo(
@@ -82,14 +83,22 @@ export function AdminUsers({
     <section className="admin-layout">
       {(!isMobile || !selected) && (
         <div className="stack">
-          <div className="metrics-strip non-dashboard-metrics">
-            <StatCard label="Approved" value={stats.approved} helper="Can sign in" icon={CheckCircle2} tone="good" />
-            <StatCard label="Pending" value={stats.pending} helper="Need approval" icon={Clock3} tone="warn" />
-            <StatCard label="Suspended" value={stats.suspended} helper="Access paused" icon={ShieldAlert} tone="danger" />
-            <StatCard label="Users" value={users.length} helper="Total accounts" icon={Users} />
-          </div>
-          <div className="toolbar-panel">
-            <SearchBox value={query} onChange={setQuery} placeholder="Search users by email, status, role..." />
+          {showWidgets && (
+            <div className="metrics-strip non-dashboard-metrics collapsible-widgets">
+              <StatCard label="Approved" value={stats.approved} helper="Can sign in" icon={CheckCircle2} tone="good" />
+              <StatCard label="Pending" value={stats.pending} helper="Need approval" icon={Clock3} tone="warn" />
+              <StatCard label="Suspended" value={stats.suspended} helper="Access paused" icon={ShieldAlert} tone="danger" />
+              <StatCard label="Users" value={users.length} helper="Total accounts" icon={Users} />
+            </div>
+          )}
+          <div className="toolbar-panel sticky-toolbar">
+            <SearchBox value={query} onChange={setQuery} placeholder={isMobile ? "Search users" : "Search users by email, status, role..."} />
+            <div className="toolbar-actions">
+              <button className="small ghost widgets-toggle" type="button" onClick={() => setShowWidgets((current) => !current)}>
+                {showWidgets ? <EyeOff size={15} /> : <Eye size={15} />}
+                <span>{showWidgets ? "Hide widgets" : "Show widgets"}</span>
+              </button>
+            </div>
           </div>
           <UserPicker
             users={filteredUsers}
@@ -103,27 +112,30 @@ export function AdminUsers({
         <div className="stack">
           <section className="selected-user-panel">
             <div className="selected-user-head">
-              <div>
-                <p className="eyebrow">Selected user</p>
-                <h2>{selected.email}</h2>
-              </div>
-              <div className="detail-actions">
-                <Status status={selected.status} />
+              <div className="selected-user-title-row">
                 {isMobile && (
                   <button
                     type="button"
-                    className="small ghost"
+                    className="icon-button"
                     onClick={() => {
                       setSelected(null);
                       setShowCreate(false);
                     }}
+                    title="Back to users"
                   >
-                    Change user
+                    <ArrowLeft size={16} />
                   </button>
                 )}
+                <div className="selected-user-copy">
+                  <div className="selected-user-title-line">
+                    <h2>{selected.email}</h2>
+                    <Status status={selected.status} />
+                  </div>
+                  <p className="selected-user-subtitle">Created {formatDate(selected.created_at)} / Limit {selected.key_limit}</p>
+                </div>
               </div>
             </div>
-            <div className="selected-user-controls">
+            <div className="selected-user-toolbar">
               <label className="limit-field compact">
                 <span>Limit</span>
                 <input
@@ -137,21 +149,23 @@ export function AdminUsers({
               </label>
               <div className="user-buttons compact">
                 {selected.status === "pending" && (
-                  <button className="small" onClick={() => mutateUser(() => api.approveUser(selected.id))}>
+                  <button className="small action-chip" onClick={() => mutateUser(() => api.approveUser(selected.id))}>
                     Approve
                   </button>
                 )}
                 {selected.id !== currentUser.id && selected.status !== "suspended" && (
-                  <button className="small ghost" onClick={() => mutateUser(() => api.suspendUser(selected.id))}>
+                  <button className="small ghost action-chip" onClick={() => mutateUser(() => api.suspendUser(selected.id))}>
                     Suspend
                   </button>
                 )}
                 {selected.status === "suspended" && (
-                  <button className="small" onClick={() => mutateUser(() => api.restoreUser(selected.id))}>
+                  <button className="small action-chip" onClick={() => mutateUser(() => api.restoreUser(selected.id))}>
                     Restore
                   </button>
                 )}
               </div>
+            </div>
+            <div className="selected-user-controls">
               {isMobile ? (
                 showCreate ? (
                   <CreateKeyForm
@@ -227,9 +241,16 @@ function UserPicker({
             }}
           >
             <div className="user-main">
-              <strong>{item.email}</strong>
-              <Status status={item.status} />
+              <div className="user-row-top">
+                <strong>{item.email}</strong>
+                <div className="user-row-badges">
+                  {item.id === currentUser.id && <span className="status approved">You</span>}
+                  <Status status={item.status} />
+                </div>
+              </div>
+              <span>{item.role === "admin" ? "Administrator" : "User"} / Limit {item.key_limit} / {formatDate(item.created_at)}</span>
             </div>
+            <ChevronRight size={16} className="user-row-arrow" />
           </div>
         ))}
         {users.length === 0 && <div className="empty">No users found</div>}
