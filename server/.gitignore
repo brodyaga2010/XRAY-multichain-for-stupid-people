@@ -1,0 +1,12 @@
+# Результат сборки бинарников
+/dist/
+
+# Собранный фронтенд копируется сюда командой make web; в репозитории — только заглушка.
+# (корневой .gitignore исключает любые dist/, поэтому каталог возвращается явно)
+!/internal/web/dist/
+/internal/web/dist/*
+!/internal/web/dist/.gitkeep
+!/internal/web/dist/index.html
+
+# Локальная база режима разработки
+*.db
