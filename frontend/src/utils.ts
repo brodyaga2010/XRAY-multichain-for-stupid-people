@@ -1,18 +1,34 @@
-const dateFormat = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", year: "numeric" });
-const dateTimeFormat = new Intl.DateTimeFormat("ru-RU", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit"
-});
+const pad = (value: number) => String(value).padStart(2, "0");
 
+/** «17.11.2026» */
 export function formatDate(value: string) {
-  return dateFormat.format(new Date(value));
+  const date = new Date(value);
+  return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()}`;
 }
 
+/** «17.11.2026 20:57» */
 export function formatDateTime(value: string) {
-  return dateTimeFormat.format(new Date(value));
+  const date = new Date(value);
+  return `${formatDate(value)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** «сегодня в 20:57» / «вчера в 20:57» / «15.11.2026» */
+export function formatSeen(value: string) {
+  const date = new Date(value);
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((startOfDay(new Date()) - startOfDay(date)) / 86_400_000);
+  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  if (days <= 0) return `сегодня в ${time}`;
+  if (days === 1) return `вчера в ${time}`;
+  return formatDate(value);
+}
+
+export function shortUuid(value: string) {
+  return value.slice(0, 8);
+}
+
+export function keyTitle(key: { name: string; uuid: string }) {
+  return key.name || shortUuid(key.uuid);
 }
 
 export function formatBytes(bytes: number) {

@@ -2,7 +2,15 @@ import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { copyText } from "../utils";
 
-export function CopyButton({ text, label = "Копировать" }: { text: string; label?: string }) {
+export function CopyButton({
+  text,
+  label = "Копировать",
+  className = "small ghost"
+}: {
+  text: string;
+  label?: string;
+  className?: string;
+}) {
   const [done, setDone] = useState(false);
 
   async function copy() {
@@ -16,8 +24,8 @@ export function CopyButton({ text, label = "Копировать" }: { text: str
   }
 
   return (
-    <button type="button" className="small ghost" onClick={copy}>
-      {done ? <Check size={15} /> : <Copy size={15} />}
+    <button type="button" className={className} onClick={copy} disabled={!text}>
+      {done ? <Check size={16} /> : <Copy size={16} />}
       <span>{done ? "Скопировано" : label}</span>
     </button>
   );

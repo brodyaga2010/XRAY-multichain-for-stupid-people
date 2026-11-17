@@ -46,7 +46,13 @@ export function AuthScreen({ onAuthed }: { onAuthed: (user: User) => void }) {
         </div>
         <label>
           Эл. почта
-          <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
+          <input
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            type="email"
+            autoComplete="email"
+            required
+          />
         </label>
         <label>
           Пароль
@@ -54,6 +60,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (user: User) => void }) {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             type="password"
+            autoComplete={mode === "login" ? "current-password" : "new-password"}
             minLength={8}
             required
           />

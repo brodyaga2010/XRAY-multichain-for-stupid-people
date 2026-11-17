@@ -1,7 +1,8 @@
 import { FormEvent, useState } from "react";
+import { LogOut } from "lucide-react";
 import { api, User } from "../api";
 
-export function Profile({ user }: { user: User }) {
+export function Profile({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [repeat, setRepeat] = useState("");
@@ -32,19 +33,53 @@ export function Profile({ user }: { user: User }) {
   }
 
   return (
-    <form className="tool-panel profile-form animate-in" onSubmit={submit}>
-      <div className="panel-heading">
-        <h2>Смена пароля</h2>
-        <span>{user.email}</span>
-      </div>
-      <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} placeholder="Текущий пароль" autoComplete="current-password" required />
-      <input type="password" value={next} onChange={(e) => setNext(e.target.value)} placeholder="Новый пароль (от 8 символов)" minLength={8} autoComplete="new-password" required />
-      <input type="password" value={repeat} onChange={(e) => setRepeat(e.target.value)} placeholder="Повторите новый пароль" minLength={8} autoComplete="new-password" required />
-      {error && <p className="error">{error}</p>}
-      {done && <p className="success">{done}</p>}
-      <button className="primary" disabled={busy}>
-        {busy ? "Подождите..." : "Сменить пароль"}
-      </button>
-    </form>
+    <div className="profile-layout">
+      <section className="tool-panel animate-in">
+        <div className="panel-heading">
+          <h2>Аккаунт</h2>
+        </div>
+        <dl className="user-facts">
+          <div className="fact-wide">
+            <dt>Эл. почта</dt>
+            <dd className="ellipsis" title={user.email}>
+              {user.email}
+            </dd>
+          </div>
+          <div>
+            <dt>Роль</dt>
+            <dd>{user.role === "admin" ? "Администратор" : "Пользователь"}</dd>
+          </div>
+          <div>
+            <dt>Лимит ключей</dt>
+            <dd>{user.key_limit}</dd>
+          </div>
+        </dl>
+        <button type="button" className="ghost danger logout-button" onClick={onLogout}>
+          <LogOut size={17} /> Выйти
+        </button>
+      </section>
+      <form className="tool-panel profile-form animate-in" onSubmit={submit}>
+        <div className="panel-heading">
+          <h2>Смена пароля</h2>
+        </div>
+        <label>
+          Текущий пароль
+          <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" required />
+        </label>
+        <label>
+          Новый пароль
+          <input type="password" value={next} onChange={(e) => setNext(e.target.value)} placeholder="От 8 символов" minLength={8} autoComplete="new-password" required />
+        </label>
+        <label>
+          Повторите новый пароль
+          <input type="password" value={repeat} onChange={(e) => setRepeat(e.target.value)} minLength={8} autoComplete="new-password" required />
+        </label>
+        {error && <p className="error">{error}</p>}
+        {done && <p className="success">{done}</p>}
+        <button className="primary" disabled={busy}>
+          {busy ? "Подождите..." : "Сменить пароль"}
+        </button>
+      </form>
+    </div>
   );
 }

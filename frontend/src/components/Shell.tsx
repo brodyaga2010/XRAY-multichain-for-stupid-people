@@ -4,12 +4,10 @@ import {
   ScrollText,
   UserCog,
   LogOut,
-  Menu,
   PanelLeftClose,
   PanelLeftOpen,
   ShieldCheck,
-  Users,
-  X
+  Users
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { api, User } from "../api";
@@ -27,7 +25,7 @@ const userNav = [
 ];
 const adminNav = [
   { id: "dashboard" as const, label: "Обзор", icon: BarChart3 },
-  { id: "admin" as const, label: "Пользователи", icon: Users },
+  { id: "admin" as const, label: "Пользователи", short: "Люди", icon: Users },
   { id: "keys" as const, label: "Ключи", icon: KeyRound },
   { id: "audit" as const, label: "Журнал", icon: ScrollText },
   { id: "profile" as const, label: "Профиль", icon: UserCog }
@@ -35,7 +33,6 @@ const adminNav = [
 
 export function Shell({ user, onUserChange }: { user: User; onUserChange: (user: User | null) => void }) {
   const [view, setView] = useState<AppView>(user.role === "admin" ? "dashboard" : "keys");
-  const [menuOpen, setMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("sidebar-collapsed") === "true");
   const [error, setError] = useState("");
   const nav = useMemo(() => (user.role === "admin" ? adminNav : userNav), [user.role]);
@@ -47,8 +44,8 @@ export function Shell({ user, onUserChange }: { user: User; onUserChange: (user:
 
   function selectView(next: AppView) {
     setView(next);
-    setMenuOpen(false);
     setError("");
+    window.scrollTo({ top: 0 });
   }
 
   function toggleSidebar() {
@@ -60,15 +57,12 @@ export function Shell({ user, onUserChange }: { user: User; onUserChange: (user:
 
   return (
     <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
-      <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
+      <aside className="sidebar">
         <div className="brand-row">
           <div className="brand-mark compact">
             <ShieldCheck size={24} />
             <span>{SITE_NAME || "Кабинет"}</span>
           </div>
-          <button className="icon-button mobile-only" onClick={() => setMenuOpen(false)} title="Закрыть меню">
-            <X size={18} />
-          </button>
         </div>
         <nav>
           {nav.map((item) => (
@@ -83,56 +77,47 @@ export function Shell({ user, onUserChange }: { user: User; onUserChange: (user:
             </button>
           ))}
         </nav>
-        <button className="sidebar-toggle desktop-only" onClick={toggleSidebar} title={sidebarCollapsed ? "Развернуть меню" : "Свернуть меню"}>
+        <button className="sidebar-toggle" onClick={toggleSidebar} title={sidebarCollapsed ? "Развернуть меню" : "Свернуть меню"}>
           {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
           <span>{sidebarCollapsed ? "Развернуть" : "Свернуть"}</span>
         </button>
       </aside>
       <main className="workspace">
         <header className="topbar">
-          <button className="icon-button menu-launcher" onClick={() => setMenuOpen(true)} title="Открыть меню">
-            <Menu size={18} />
-          </button>
-          <div className="topbar-copy">
-            <div className="topbar-head">
-              <h1>{titleFor(view)}</h1>
-              <span className={`status mobile-session ${user.role === "admin" ? "approved" : "active"}`}>
-                {user.role === "admin" ? "Админ" : "Подтверждён"}
-              </span>
-            </div>
-          </div>
+          <h1>{titleFor(view)}</h1>
+          <span className={`status role-badge ${user.role === "admin" ? "approved" : "active"}`}>
+            {user.role === "admin" ? "Админ" : "Пользователь"}
+          </span>
           <div className="account">
             <div className="account-meta">
-              <span>{user.email}</span>
+              <span className="ellipsis" title={user.email}>
+                {user.email}
+              </span>
               <span className={`status ${user.role === "admin" ? "approved" : "active"}`}>
                 {user.role === "admin" ? "Админ" : "Подтверждён"}
               </span>
             </div>
-            <button className="icon-button account-logout" title="Выйти" onClick={logout}>
+            <button className="icon-button account-logout" title="Выйти" aria-label="Выйти" onClick={logout}>
               <LogOut size={18} />
             </button>
           </div>
         </header>
         {error && <div className="banner error">{error}</div>}
         <section className="view-frame">
-          {view === "dashboard" && user.role === "admin" && <AdminDashboard setError={setError} />}
+          {view === "dashboard" && user.role === "admin" && <AdminDashboard setError={setError} onNavigate={selectView} />}
           {view === "admin" && user.role === "admin" && <AdminUsers currentUser={user} setError={setError} />}
           {view === "audit" && user.role === "admin" && <AuditLog setError={setError} />}
-          {view === "profile" && <Profile user={user} />}
+          {view === "profile" && <Profile user={user} onLogout={logout} />}
           {view === "keys" && <UserKeys user={user} isAdmin={user.role === "admin"} setError={setError} />}
         </section>
       </main>
-      <nav className="bottom-nav">
+      <nav className="bottom-nav" aria-label="Основное меню">
         {nav.map((item) => (
           <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => selectView(item.id)}>
-            <item.icon size={19} />
-            <span>{item.label}</span>
+            <item.icon size={20} />
+            <span>{"short" in item ? item.short : item.label}</span>
           </button>
         ))}
-        <button onClick={logout}>
-          <LogOut size={19} />
-          <span>Выйти</span>
-        </button>
       </nav>
     </div>
   );

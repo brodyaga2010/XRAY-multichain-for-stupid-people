@@ -3,20 +3,42 @@ import { Activity, ArrowUpDown, Clock3, KeyRound, ShieldAlert, Users, Wifi } fro
 import { api, User, VpnKey } from "../api";
 import { StatCard } from "../components/StatCard";
 import { Status } from "../components/Status";
-import { formatBytes, formatDate } from "../utils";
+import { AppView } from "../types";
+import { formatBytes, formatDate, keyTitle } from "../utils";
 
-export function AdminDashboard({ setError }: { setError: (error: string) => void }) {
+export function AdminDashboard({
+  setError,
+  onNavigate
+}: {
+  setError: (error: string) => void;
+  onNavigate: (view: AppView) => void;
+}) {
   const [users, setUsers] = useState<User[]>([]);
   const [keys, setKeys] = useState<VpnKey[]>([]);
+  const [approving, setApproving] = useState<number | null>(null);
+
+  async function load() {
+    const [loadedUsers, loadedKeys] = await Promise.all([api.adminUsers(), api.adminKeys()]);
+    setUsers(loadedUsers);
+    setKeys(loadedKeys);
+  }
 
   useEffect(() => {
-    Promise.all([api.adminUsers(), api.adminKeys()])
-      .then(([loadedUsers, loadedKeys]) => {
-        setUsers(loadedUsers);
-        setKeys(loadedKeys);
-      })
-      .catch((err) => setError(err.message));
+    load().catch((err) => setError(err.message));
   }, []);
+
+  async function approve(userId: number) {
+    setApproving(userId);
+    setError("");
+    try {
+      await api.approveUser(userId);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось подтвердить пользователя");
+    } finally {
+      setApproving(null);
+    }
+  }
 
   const stats = useMemo(() => {
     const activeKeys = keys.filter((key) => key.status === "active").length;
@@ -29,7 +51,7 @@ export function AdminDashboard({ setError }: { setError: (error: string) => void
   }, [users, keys]);
 
   const recentUsers = users.slice(0, 5);
-  const pendingUsers = users.filter((user) => user.status === "pending").slice(0, 4);
+  const pendingUsers = users.filter((user) => user.status === "pending").slice(0, 5);
   const recentKeys = [...keys]
     .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
     .slice(0, 6);
@@ -47,24 +69,6 @@ export function AdminDashboard({ setError }: { setError: (error: string) => void
 
       <section className="table-panel animate-in">
         <div className="panel-heading">
-          <h2>Новые пользователи</h2>
-          <span>всего: {users.length}</span>
-        </div>
-        <div className="activity-list">
-          {recentUsers.map((user) => (
-            <div className="activity-row" key={user.id}>
-              <Activity size={17} />
-              <div>
-                <strong>{user.email}</strong>
-                <span>Регистрация: {formatDate(user.created_at)}</span>
-              </div>
-              <Status status={user.status} kind="user" />
-            </div>
-          ))}
-        </div>
-      </section>
-      <section className="table-panel animate-in">
-        <div className="panel-heading">
           <h2>Ждут подтверждения</h2>
           <span>ожидают: {stats.pendingUsers}</span>
         </div>
@@ -74,15 +78,39 @@ export function AdminDashboard({ setError }: { setError: (error: string) => void
               <div className="activity-row" key={user.id}>
                 <Clock3 size={17} />
                 <div>
-                  <strong>{user.email}</strong>
+                  <strong className="ellipsis" title={user.email}>
+                    {user.email}
+                  </strong>
                   <span>Запрос доступа: {formatDate(user.created_at)}</span>
                 </div>
-                <Status status={user.status} kind="user" />
+                <button className="small" disabled={approving === user.id} onClick={() => approve(user.id)}>
+                  Подтвердить
+                </button>
               </div>
             ))
           ) : (
             <div className="empty">Нет заявок на подтверждение</div>
           )}
+        </div>
+      </section>
+      <section className="table-panel animate-in">
+        <div className="panel-heading">
+          <h2>Новые пользователи</h2>
+          <span>всего: {users.length}</span>
+        </div>
+        <div className="activity-list">
+          {recentUsers.map((user) => (
+            <div className="activity-row" key={user.id}>
+              <Activity size={17} />
+              <div>
+                <strong className="ellipsis" title={user.email}>
+                  {user.email}
+                </strong>
+                <span>Регистрация: {formatDate(user.created_at)}</span>
+                <Status status={user.status} kind="user" />
+              </div>
+            </div>
+          ))}
         </div>
       </section>
       <section className="table-panel dashboard-keys animate-in">
@@ -95,20 +123,24 @@ export function AdminDashboard({ setError }: { setError: (error: string) => void
             <div className="activity-row" key={key.id}>
               <KeyRound size={17} />
               <div>
-                <strong>{key.name || shortUuid(key.uuid)}</strong>
-                <span>
+                <strong className="ellipsis" title={keyTitle(key)}>
+                  {keyTitle(key)}
+                </strong>
+                <span className="ellipsis" title={key.owner_email ?? undefined}>
                   {key.owner_email ?? "—"} / {formatDate(key.created_at)}
                 </span>
               </div>
               <Status status={key.status} />
             </div>
           ))}
+          {recentKeys.length === 0 && <div className="empty">Ключей пока нет</div>}
         </div>
+        {keys.length > 0 && (
+          <button type="button" className="link-button" onClick={() => onNavigate("keys")}>
+            Все ключи
+          </button>
+        )}
       </section>
     </div>
   );
-}
-
-function shortUuid(value: string) {
-  return value.slice(0, 8);
 }

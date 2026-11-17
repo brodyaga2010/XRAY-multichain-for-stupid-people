@@ -1,151 +1,213 @@
 import { Link2, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { KeyStatus, VpnKey } from "../api";
-import { formatDate } from "../utils";
+import { formatDate, keyTitle, shortUuid } from "../utils";
+import { FilterChips } from "./FilterChips";
 import { OnlineIndicator, Traffic } from "./KeyActivity";
 import { KeyModal } from "./KeyModal";
 import { Status } from "./Status";
 
 type KeyFilter = "all" | KeyStatus;
 
-const filters: Array<{ id: KeyFilter; label: string }> = [
+const allFilters: Array<{ id: KeyFilter; label: string }> = [
   { id: "all", label: "Все" },
   { id: "active", label: "Активные" },
   { id: "suspended", label: "Отключённые" },
   { id: "revoked", label: "Отозванные" }
 ];
+const filtersWithoutRevoked = allFilters.filter((item) => item.id !== "revoked");
 
 export function KeyTable({
   keys,
   showOwner = false,
-  onRevoke
+  onRevoke,
+  title = "Ключи",
+  showCount = true,
+  headerExtra,
+  beforeList,
+  empty,
+  collapseRevoked = false,
+  autoOpenKeyId = null
 }: {
   keys: VpnKey[];
   showOwner?: boolean;
   onRevoke: (id: number) => void | Promise<void>;
+  title?: string;
+  showCount?: boolean;
+  /** Кнопки справа в шапке списка. */
+  headerExtra?: ReactNode;
+  /** Содержимое между шапкой и списком (форма, поиск). */
+  beforeList?: ReactNode;
+  /** Заменяет «Ключей нет», когда список пуст. */
+  empty?: ReactNode;
+  /** Отозванные ключи скрыты под ссылкой «Показать отозванные». */
+  collapseRevoked?: boolean;
+  /** Открыть модалку этого ключа (например, только что созданного). */
+  autoOpenKeyId?: number | null;
 }) {
-  const [activityFilter, setActivityFilter] = useState<KeyFilter>("all");
+  const [filter, setFilter] = useState<KeyFilter>("all");
+  const [showRevoked, setShowRevoked] = useState(false);
   const [openKeyId, setOpenKeyId] = useState<number | null>(null);
 
+  useEffect(() => {
+    if (autoOpenKeyId !== null) setOpenKeyId(autoOpenKeyId);
+  }, [autoOpenKeyId]);
+
+  const sorted = useMemo(
+    () => [...keys].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+    [keys]
+  );
   const activeCount = useMemo(() => keys.filter((key) => key.status === "active").length, [keys]);
+  const revokedKeys = useMemo(() => sorted.filter((key) => key.status === "revoked"), [sorted]);
+  const baseKeys = collapseRevoked ? sorted.filter((key) => key.status !== "revoked") : sorted;
+  const filtered = baseKeys.filter((key) => filter === "all" || key.status === filter);
+  const rendered = collapseRevoked && showRevoked && filter === "all" ? [...filtered, ...revokedKeys] : filtered;
   const openKey = keys.find((key) => key.id === openKeyId) ?? null;
-  const visibleKeys = useMemo(() => {
-    const filtered = keys.filter((key) => activityFilter === "all" || key.status === activityFilter);
-    return filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  }, [activityFilter, keys]);
-  const columns = showOwner ? 7 : 6;
+  const showChips = collapseRevoked ? baseKeys.length >= 4 : keys.length > 0;
 
   function confirmRevoke(key: VpnKey) {
-    if (window.confirm(`Отозвать ключ «${key.name}»?`)) void onRevoke(key.id);
+    if (window.confirm(`Отозвать ключ «${keyTitle(key)}»?`)) void onRevoke(key.id);
   }
 
   return (
-    <div className="table-panel key-table animate-in">
+    <div className="table-panel key-table">
       <div className="panel-heading">
-        <h2>Ключи</h2>
-        <span>активных: {activeCount}</span>
-      </div>
-      <div className="key-filter-bar">
-        <div className="key-filter-segmented">
-          {filters.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={activityFilter === item.id ? "active" : ""}
-              onClick={() => setActivityFilter(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
+        <h2>{title}</h2>
+        <div className="panel-heading-side">
+          {showCount && <span>активных: {activeCount}</span>}
+          {headerExtra}
         </div>
       </div>
-      <div className="responsive-table">
-        <table>
-          <thead>
-            <tr>
-              <th>Ключ</th>
-              {showOwner && <th>Владелец</th>}
-              <th>Статус</th>
-              <th>Активность</th>
-              <th>Трафик</th>
-              <th>Создан</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {visibleKeys.map((key) => (
-              <tr key={key.id}>
-                <td data-label="Ключ">
-                  <div className="table-key">
-                    <strong>{key.name}</strong>
+      {beforeList}
+      {showChips && (
+        <FilterChips
+          label="Фильтр по статусу"
+          options={collapseRevoked ? filtersWithoutRevoked : allFilters}
+          value={filter}
+          onChange={setFilter}
+        />
+      )}
+      {rendered.length === 0 ? (
+        empty ?? <div className="empty">Ключей нет</div>
+      ) : (
+        <>
+          <div className="responsive-table">
+            <table>
+              <thead>
+                <tr>
+                  <th className="col-name">Ключ</th>
+                  {showOwner && <th>Владелец</th>}
+                  <th>Статус</th>
+                  <th>Трафик</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rendered.map((key) => (
+                  <tr key={key.id} className={key.status === "revoked" ? "dimmed" : ""}>
+                    <td className="col-name">
+                      <div className="table-key">
+                        <strong className="clamp-2" title={keyTitle(key)}>
+                          {keyTitle(key)}
+                        </strong>
+                        <span className="uuid">
+                          {shortUuid(key.uuid)} · {formatDate(key.created_at)}
+                        </span>
+                      </div>
+                    </td>
+                    {showOwner && (
+                      <td>
+                        <span className="ellipsis owner-cell" title={key.owner_email ?? undefined}>
+                          {key.owner_email ?? "—"}
+                        </span>
+                      </td>
+                    )}
+                    <td>
+                      <div className="status-cell">
+                        <Status status={key.status} />
+                        {key.status !== "revoked" && <OnlineIndicator keyItem={key} />}
+                      </div>
+                    </td>
+                    <td>
+                      <Traffic keyItem={key} />
+                    </td>
+                    <td>
+                      {key.status !== "revoked" && (
+                        <div className="row-actions">
+                          {key.status === "active" && (
+                            <button className="small ghost" onClick={() => setOpenKeyId(key.id)}>
+                              <Link2 size={15} /> Подключить
+                            </button>
+                          )}
+                          <button
+                            className="icon-button danger"
+                            title="Отозвать"
+                            aria-label="Отозвать ключ"
+                            onClick={() => confirmRevoke(key)}
+                          >
+                            <Trash2 size={17} />
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="key-cards">
+            {rendered.map((key) => (
+              <article className={`key-card ${key.status === "revoked" ? "dimmed" : ""}`} key={key.id}>
+                <div className="key-card-head">
+                  <div className="key-card-title">
+                    <strong className="clamp-2" title={keyTitle(key)}>
+                      {keyTitle(key)}
+                    </strong>
+                    {showOwner && key.owner_email && (
+                      <span className="key-card-subtitle ellipsis" title={key.owner_email}>
+                        {key.owner_email}
+                      </span>
+                    )}
                   </div>
-                </td>
-                {showOwner && <td data-label="Владелец">{key.owner_email ?? "—"}</td>}
-                <td data-label="Статус">
                   <Status status={key.status} />
-                </td>
-                <td data-label="Активность">
+                </div>
+                <div className="key-card-meta">
                   <OnlineIndicator keyItem={key} />
-                </td>
-                <td data-label="Трафик">
-                  <Traffic keyItem={key} />
-                </td>
-                <td data-label="Создан">{formatDate(key.created_at)}</td>
-                <td className="row-actions">
-                  {key.status !== "revoked" && (
-                    <button className="small ghost" title="Подключить" onClick={() => setOpenKeyId(key.id)}>
-                      <Link2 size={15} /> Подключить
+                  <div className="key-card-line">
+                    <Traffic keyItem={key} />
+                    <span>{formatDate(key.created_at)}</span>
+                  </div>
+                </div>
+                {key.status !== "revoked" && (
+                  <div className="key-card-actions">
+                    {key.status === "active" ? (
+                      <button className="primary" onClick={() => setOpenKeyId(key.id)}>
+                        <Link2 size={17} />
+                        <span>Подключить</span>
+                      </button>
+                    ) : (
+                      <span className="muted key-card-note">Отключён вместе с пользователем</span>
+                    )}
+                    <button
+                      className="icon-button danger"
+                      title="Отозвать ключ"
+                      aria-label="Отозвать ключ"
+                      onClick={() => confirmRevoke(key)}
+                    >
+                      <Trash2 size={18} />
                     </button>
-                  )}
-                  {key.status !== "revoked" && (
-                    <button className="icon-button danger" title="Отозвать" onClick={() => confirmRevoke(key)}>
-                      <Trash2 size={17} />
-                    </button>
-                  )}
-                </td>
-              </tr>
+                  </div>
+                )}
+              </article>
             ))}
-            {visibleKeys.length === 0 && (
-              <tr>
-                <td colSpan={columns} className="empty">
-                  Ключей нет
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      <div className="key-cards">
-        {visibleKeys.map((key) => (
-          <article className="key-card" key={key.id}>
-            <div className="key-card-head">
-              <div className="key-card-title">
-                <strong>{key.name}</strong>
-                {showOwner && key.owner_email && <span className="key-card-subtitle">{key.owner_email}</span>}
-              </div>
-              <Status status={key.status} />
-            </div>
-            <div className="key-card-meta">
-              <OnlineIndicator keyItem={key} />
-              <Traffic keyItem={key} />
-              <span>Создан {formatDate(key.created_at)}</span>
-            </div>
-            {key.status !== "revoked" && (
-              <div className="key-card-actions">
-                <button className="ghost action-button" onClick={() => setOpenKeyId(key.id)}>
-                  <Link2 size={16} />
-                  <span>Подключить</span>
-                </button>
-                <button className="ghost action-button danger icon-only-mobile" title="Отозвать ключ" onClick={() => confirmRevoke(key)}>
-                  <Trash2 size={16} />
-                  <span>Отозвать</span>
-                </button>
-              </div>
-            )}
-          </article>
-        ))}
-        {visibleKeys.length === 0 && <div className="empty">Ключей нет</div>}
-      </div>
+          </div>
+        </>
+      )}
+      {collapseRevoked && revokedKeys.length > 0 && (
+        <button type="button" className="link-button" onClick={() => setShowRevoked((current) => !current)}>
+          {showRevoked ? "Скрыть отозванные" : `Показать отозванные (${revokedKeys.length})`}
+        </button>
+      )}
       {openKey && <KeyModal keyItem={openKey} onClose={() => setOpenKeyId(null)} />}
     </div>
   );

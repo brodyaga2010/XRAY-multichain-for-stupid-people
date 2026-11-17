@@ -275,3 +275,17 @@ def test_suspended_key_is_not_online(client: TestClient, db: Session) -> None:
     login(client, "user@example.com")
 
     assert client.get("/keys").json()[0]["online"] is False
+
+
+def test_datetimes_are_serialized_with_timezone(client: TestClient, db: Session) -> None:
+    make_user(db, email="user@example.com")
+    login(client, "user@example.com")
+    key = client.post("/keys", json={"name": "phone"}).json()
+    stored = db.get(VpnKey, key["id"])
+    stored.last_seen_at = datetime(2026, 11, 17, 20, 57, 0)  # как из SQLite: без зоны
+    db.commit()
+
+    listed = client.get("/keys").json()[0]
+
+    assert listed["last_seen_at"].endswith(("Z", "+00:00"))
+    assert listed["created_at"].endswith(("Z", "+00:00"))

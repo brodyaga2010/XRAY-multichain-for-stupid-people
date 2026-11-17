@@ -1,5 +1,5 @@
 import { VpnKey } from "../api";
-import { formatBytes, formatDateTime } from "../utils";
+import { formatBytes, formatSeen } from "../utils";
 
 export function OnlineIndicator({ keyItem }: { keyItem: VpnKey }) {
   if (keyItem.online) {
@@ -11,7 +11,7 @@ export function OnlineIndicator({ keyItem }: { keyItem: VpnKey }) {
   }
   return (
     <span className="online-indicator">
-      <i /> {keyItem.last_seen_at ? `Был(а) ${formatDateTime(keyItem.last_seen_at)}` : "Не подключался"}
+      <i /> {keyItem.last_seen_at ? `Был(а) ${formatSeen(keyItem.last_seen_at)}` : "Не подключался"}
     </span>
   );
 }

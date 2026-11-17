@@ -1,69 +1,51 @@
 import { FormEvent, useState } from "react";
-import { Plus, X } from "lucide-react";
-import { User } from "../api";
+import { Plus } from "lucide-react";
 
 export function CreateKeyForm({
-  user,
-  activeCount,
-  compact = false,
-  onClose,
-  onCreate
+  onCreate,
+  submitLabel = "Создать",
+  placeholder = "Название устройства (Телефон, Ноутбук)",
+  autoFocus = false
 }: {
-  user: User;
-  activeCount?: number;
-  compact?: boolean;
-  onClose?: () => void;
   onCreate: (name: string) => Promise<void>;
+  submitLabel?: string;
+  placeholder?: string;
+  autoFocus?: boolean;
 }) {
   const [name, setName] = useState("");
-  const limitReached = activeCount !== undefined && activeCount >= user.key_limit;
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    await onCreate(name.trim());
-    setName("");
+    setBusy(true);
+    setError("");
+    try {
+      await onCreate(name.trim());
+      setName("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось создать ключ");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
-    <form className={compact ? "inline-create" : "tool-panel"} onSubmit={submit}>
-      {!compact && (
-        <div className="panel-heading">
-          <h2>Создать ключ</h2>
-          {activeCount !== undefined && (
-            <span>
-              {activeCount}/{user.key_limit} активных
-            </span>
-          )}
-        </div>
-      )}
-      {compact && (
-        <div className="inline-create-head">
-          <div>
-            <h3>Создать ключ</h3>
-            {activeCount !== undefined && (
-              <span>
-                {activeCount}/{user.key_limit} активных
-              </span>
-            )}
-          </div>
-          {onClose && (
-            <button className="icon-button" type="button" onClick={onClose} aria-label="Закрыть форму создания ключа">
-              <X size={16} />
-            </button>
-          )}
-        </div>
-      )}
+    <form className="inline-form" onSubmit={submit}>
       <input
         value={name}
         onChange={(event) => setName(event.target.value)}
-        placeholder="Название устройства (Телефон, Ноутбук)"
+        placeholder={placeholder}
+        aria-label="Название устройства"
         minLength={1}
         maxLength={60}
+        autoFocus={autoFocus}
         required
       />
-      <button className="primary" disabled={limitReached}>
-        <Plus size={17} /> Создать ключ
+      <button className="primary" disabled={busy || !name.trim()}>
+        <Plus size={17} /> {busy ? "Создание..." : submitLabel}
       </button>
+      {error && <p className="error inline-form-error">{error}</p>}
     </form>
   );
 }

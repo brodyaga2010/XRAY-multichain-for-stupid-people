@@ -1,9 +1,17 @@
-from datetime import datetime
-from typing import Any
+from datetime import UTC, datetime
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models import KeyStatus, KeyType, UserRole, UserStatus
+
+
+def _as_utc(value: datetime) -> datetime:
+    """SQLite хранит время без зоны (это UTC) — отдаём клиенту с явной зоной."""
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value
+
+
+UtcDatetime = Annotated[datetime, AfterValidator(_as_utc)]
 
 
 class UserCreate(BaseModel):
@@ -24,7 +32,7 @@ class UserOut(BaseModel):
     role: UserRole
     status: UserStatus
     key_limit: int
-    created_at: datetime
+    created_at: UtcDatetime
 
 
 class AuthSession(BaseModel):
@@ -69,10 +77,10 @@ class VpnKeyOut(BaseModel):
     short_id: str
     connection_uri: str
     client_config_json: dict[str, Any] | None
-    created_at: datetime
+    created_at: UtcDatetime
     traffic_up: int = 0
     traffic_down: int = 0
-    last_seen_at: datetime | None = None
+    last_seen_at: UtcDatetime | None = None
     links: list[KeyLinkOut] = []
     online: bool = False
     owner_email: str | None = None
@@ -109,4 +117,4 @@ class AuditLogOut(BaseModel):
     target_type: str
     target_id: str
     audit_metadata: dict[str, Any]
-    created_at: datetime
+    created_at: UtcDatetime
