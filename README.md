@@ -86,25 +86,16 @@ Use AmneziaVPN, copy generated connection string to 'InsertKey' field and press 
 
 ## Web Control Plane
 
-This repository now also contains a web control plane in separate folders:
+Личный кабинет для пользователей и администратора: ключи (TCP, gRPC и XHTTP поверх REALITY), подписка,
+трафик и онлайн, блокировка, журнал действий. Ключи добавляются в Xray через его API без перезапуска.
 
-- `backend/` - FastAPI API, Postgres models, Alembic migrations, JWT cookie auth, Xray SSH manager.
-- `frontend/` - React + Vite dashboard for users and administrators.
-- `deploy/` - Docker Compose for Postgres, backend, and frontend.
-
-Local dry-run start:
+Кабинет — один бинарник на Go со встроенным интерфейсом (`server/`, `frontend/`). Ставится на relay-сервер
+рядом с Xray:
 
 ```bash
-cd deploy
-cp .env.example .env
-mkdir -p secrets
-printf "dry-run" > secrets/xray_ssh_key
-docker compose up --build
+make -C server web build SITE_NAME=example   # на машине с Go и Node
+sudo ./deploy/install_panel.sh --panel-domain panel.example.com --vpn-domain example.com \
+     --admin-email admin@example.com --site-name example    # на сервере
 ```
 
-Open `http://localhost:5173`.
-
-For production, set `XRAY_DRY_RUN=false`, put a relay SSH private key into
-`deploy/secrets/xray_ssh_key`, and configure `XRAY_RELAY_HOST`.
-
-Full documentation: [`docs/WEB_CONTROL_PLANE.md`](docs/WEB_CONTROL_PLANE.md).
+Подробнее: [`deploy/README.md`](deploy/README.md) — установка, [`docs/WEB_CONTROL_PLANE.md`](docs/WEB_CONTROL_PLANE.md) — устройство, API, разработка.

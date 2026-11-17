@@ -1,10 +1,19 @@
-# Xray Control Plane Deploy
+# Установка личного кабинета
 
 ## Установка на входной (relay) сервер — рекомендуемый вариант
 
-Панель ставится на тот же сервер, где работает Xray-relay, и управляет им локально
-(без SSH-паролей и ключей). Docker не нужен: бэкенд — systemd-сервис, база — SQLite,
-фронтенд — статика, которую раздаёт Caddy.
+Кабинет ставится на тот же сервер, где работает Xray-relay, и управляет им локально
+(без SSH-паролей и ключей). Это один бинарник `/usr/local/bin/xray-panel` со встроенным интерфейсом,
+systemd-сервис и база SQLite — ни Python, ни Node, ни Docker на сервере не нужны.
+
+Сначала соберите бинарник на любой машине с Go 1.26+ и Node 22+:
+
+```bash
+make -C server web build SITE_NAME=example VERSION=v2.0.0
+```
+
+и скопируйте на сервер каталог `deploy/` и `server/dist/xray-panel-linux-amd64` (или `-arm64`),
+сохранив пути относительно корня репозитория, либо укажите бинарник флагом `--binary`.
 
 Требования: Xray и Caddy уже настроены скриптами `generate_config.sh` и `setup-caddy.sh`,
 A-запись домена панели указывает на сервер.
@@ -37,22 +46,13 @@ sudo ./deploy/install_panel.sh \
 
 Ключи, созданные раньше скриптами, подтягиваются кнопкой «Импортировать ключи с сервера».
 
-## Local start (разработка, dry-run)
+## Обновление
 
-```bash
-cd deploy
-cp .env.example .env
-mkdir -p secrets
-printf "dry-run" > secrets/xray_ssh_key
-docker compose up --build
-```
+Соберите новый бинарник и запустите тот же `install_panel.sh`: он заменит бинарник, применит миграции и
+перезапустит сервис. Xray при этом не перезапускается, VPN-соединения не рвутся.
+Прежняя Python-версия кабинета удаляется автоматически, её база и настройки подхватываются как есть.
 
-Open `http://localhost:5173`.
+## Разработка
 
-`XRAY_MODE=dry_run` (по умолчанию) — ключи создаются без реального сервера, в памяти.
-
-## Панель на отдельной машине (SSH)
-
-`XRAY_MODE=ssh`, `XRAY_RELAY_HOST`, `XRAY_RELAY_USER`, приватный ключ в `deploy/secrets/xray_ssh_key`,
-`XRAY_SSH_KNOWN_HOSTS` — файл known_hosts для проверки ключа сервера. Конфиг relay готовится командой
-`python -m app.xray_bootstrap` (API, статистика, XHTTP).
+См. раздел «Разработка» в [`docs/WEB_CONTROL_PLANE.md`](../docs/WEB_CONTROL_PLANE.md): API запускается
+`go run ./cmd/xray-panel` в режиме `XRAY_MODE=dry_run`, интерфейс — `npm run dev`.

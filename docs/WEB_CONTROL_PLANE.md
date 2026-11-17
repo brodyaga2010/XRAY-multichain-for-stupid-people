@@ -1,586 +1,189 @@
-# Web Control Plane для Xray VPN
+# Личный кабинет (web control plane) для Xray
 
-Документ описывает новую систему управления пользователями и VPN-ключами в этом репозитории.
+Кабинет управляет пользователями и их ключами Xray на входном (relay) сервере. Это один бинарник на Go
+со встроенным интерфейсом (React): на сервере не нужны ни Python, ни Node, ни Docker.
 
-## Что добавлено
-
-Проект теперь состоит из двух частей:
-
-- Legacy shell-скрипты в корне репозитория: установка Xray, генерация relay/exit конфигов, ручное добавление пользователей.
-- Новый web control plane:
-  - `backend/` - FastAPI backend на Python.
-  - `frontend/` - React + Vite frontend.
-  - `deploy/` - Docker Compose для Postgres, backend и frontend.
-
-Control plane управляет пользовательскими ключами Xray через relay-сервер. Пользовательские доступы добавляются и удаляются из `/usr/local/etc/xray/config.json` на relay через SSH.
+Установка на сервер описана в [`deploy/README.md`](../deploy/README.md).
 
 ## Как это работает
 
-### Роли
+### Роли и статусы
 
-Есть две роли:
+- `admin` — видит всех пользователей и все ключи, подтверждает регистрации, блокирует, меняет лимиты,
+  создаёт ключи за пользователя, смотрит журнал действий.
+- `user` — видит и создаёт свои ключи в пределах лимита, получает ссылку-подписку.
 
-- `admin` - администратор сервиса.
-- `user` - обычный пользователь.
+Новый пользователь регистрируется по email и паролю и получает статус `pending`; войти он сможет после
+подтверждения администратором. Статусы: `pending`, `approved`, `suspended`.
 
-Новый пользователь регистрируется через email/password и получает статус `pending`. Он не может войти в приложение, пока администратор не подтвердит его.
-
-Статусы пользователей:
-
-- `pending` - ожидает подтверждения.
-- `approved` - может входить и управлять ключами.
-- `suspended` - заблокирован.
+Блокировка (`suspend`) сразу убирает все активные ключи пользователя из Xray (ключи получают статус
+`suspended`), восстановление (`restore`) возвращает их. Отозванные (`revoked`) ключи не возвращаются.
 
 ### Ключи
 
-В v1 поддерживаются два типа пользовательских ключей:
+Ключ — один UUID, который добавляется во все пользовательские inbound relay-сервера. Для каждого ключа
+кабинет выдаёт три ссылки `vless://` — пользователь выбирает ту, что лучше работает в его сети:
 
-- `tcp_reality` - VLESS REALITY TCP, relay inbound `user-inbound`, порт `443`.
-- `xhttp_reality` - VLESS REALITY XHTTP, relay inbound `user-inbound-xhttp`, порт `80`.
+| Транспорт | Inbound tag | Порт |
+|---|---|---|
+| TCP + REALITY (xtls-rprx-vision) | `user-inbound` | 443 |
+| gRPC + REALITY | `user-inbound-grpc` | 8443 |
+| XHTTP + REALITY | `user-inbound-xhttp` | 2053 (`XRAY_XHTTP_PORT`) |
 
-Для каждого ключа backend хранит в Postgres:
+В Xray `email` клиента равен его UUID — по нему считаются трафик и онлайн.
 
-- UUID ключа.
-- владельца;
-- имя ключа;
-- тип;
-- SNI;
-- статус `active` или `revoked`;
-- VLESS connection URI;
-- XHTTP JSON client config, если ключ XHTTP.
+Подписка: `https://<домен кабинета>/sub/<токен>` отдаёт все активные ссылки пользователя (base64),
+с заголовками `profile-title`, `profile-update-interval` и `subscription-userinfo` (трафик).
+Токен можно перевыпустить — старая ссылка перестанет работать.
 
 ### Управление Xray
 
-Backend не вызывает старые `add_user_*.sh` скрипты. Вместо этого он использует `XrayManager`:
+Кабинет работает на том же сервере, что и Xray (`XRAY_MODE=local`), и не использует старые скрипты
+`add_user_*.sh`. При создании или удалении ключа:
 
-1. Подключается к relay-серверу по SSH.
-2. Читает `/usr/local/etc/xray/config.json`.
-3. Находит inbound по `tag`, а не по индексу массива:
-   - `user-inbound`;
-   - `user-inbound-xhttp`.
-4. Добавляет или удаляет UUID в `settings.clients`.
-5. Загружает временный конфиг на relay.
-6. Проверяет его командой:
+1. Под файловой блокировкой читается `/usr/local/etc/xray/config.json`, inbound ищутся по `tag`.
+2. Новый конфиг пишется во временный `*.json` рядом и проверяется `xray run -test`.
+3. Текущий конфиг копируется в `/var/lib/xray-panel/backups` (хранятся последние 30), новый
+   атомарно заменяет старый.
+4. Изменение применяется через API Xray (`127.0.0.1:10085`, команды `adu` и `rmu`) — **без перезапуска**,
+   соединения остальных пользователей не рвутся.
+5. Если API недоступно, кабинет перезапускает Xray (`XRAY_RESTART_COMMAND`, через sudo-правило только на
+   `systemctl restart xray`).
 
-```bash
-xray run -test -config /tmp/xray-control-config.tmp
-```
+Если проверка конфига не прошла, ключ не сохраняется, а пользователь получает ошибку.
 
-7. Делает backup текущего конфига.
-8. Заменяет config.
-9. Перезапускает Xray:
+Раз в минуту кабинет забирает статистику (`statsquery -reset`, `statsgetallonlineusers`): трафик
+накапливается в базе, ключ считается онлайн, если был активен за последние 3 минуты.
 
-```bash
-systemctl restart xray
-systemctl is-active --quiet xray
-```
+Команда `xray-panel bootstrap-xray` готовит конфиг relay: включает API и статистику, добавляет XHTTP
+inbound, приводит `email` клиентов к UUID. Ключи, созданные раньше скриптами, администратор подтягивает
+кнопкой «Импортировать ключи с сервера».
 
-Если проверка конфига или рестарт не проходит, backend возвращает ошибку и не записывает ключ в базу как успешно созданный.
-
-## Структура проекта
+## Структура
 
 ```text
-backend/
-  app/
-    routers/          FastAPI routes: auth, keys, admin
-    services/         XrayManager
-    models.py         SQLAlchemy models
-    schemas.py        Pydantic schemas
-    security.py       password hashing + JWT cookies
-    seed_admin.py     создание первого администратора
-  alembic/            миграции БД
-  tests/              backend tests
-
-frontend/
-  src/
-    App.tsx           основной dashboard
-    api.ts            typed API client
-    styles.css        UI стили
-
-deploy/
-  docker-compose.yml
-  .env.example
-  README.md
+server/                     бэкенд на Go
+  cmd/xray-panel/           точка входа: serve, migrate, seed-admin, bootstrap-xray, version
+  internal/api/             HTTP-обработчики, авторизация, CORS, журнал запросов
+  internal/auth/            bcrypt и JWT (cookie)
+  internal/config/          настройки из окружения и env-файла
+  internal/ratelimit/       ограничение попыток входа
+  internal/stats/           сбор трафика и онлайна
+  internal/store/           SQLite: схема, миграции, запросы
+  internal/web/             встроенный интерфейс (go:embed) и SPA-fallback
+  internal/xray/            правка конфига, API Xray, ссылки vless://
+  Makefile                  web / build / test
+frontend/                   интерфейс на React + Vite
+deploy/install_panel.sh     установка и обновление на relay-сервере
 ```
 
-## Локальный запуск в dry-run режиме
+## Разработка
 
-Dry-run режим нужен для разработки без реального VPN-сервера. Backend будет создавать ключи в памяти mock Xray manager, а не ходить на relay.
-
-### Требования
-
-- Docker Desktop.
-- Свободные порты:
-  - `5173` для frontend;
-  - `8000` для backend.
-
-Postgres наружу не публикуется, поэтому порт `5432` на хосте не нужен.
-
-### Команды запуска
-
-Из корня репозитория:
+Нужны Go 1.26+ и Node 22+.
 
 ```bash
-cd deploy
-cp .env.example .env
-mkdir -p secrets
-printf "dry-run" > secrets/xray_ssh_key
-docker compose up --build
+# API в режиме dry_run: Xray имитируется в памяти, база — server/panel.db
+cp deploy/.env.example deploy/.env
+cd server
+go run ./cmd/xray-panel --env-file ../deploy/.env seed-admin
+go run ./cmd/xray-panel --env-file ../deploy/.env serve
 ```
-
-На Windows PowerShell:
-
-```powershell
-cd deploy
-Copy-Item .env.example .env
-New-Item -ItemType Directory -Force secrets
-Set-Content -NoNewline -Path secrets\xray_ssh_key -Value "dry-run"
-docker compose up --build
-```
-
-После запуска:
-
-- frontend: `http://localhost:5173`
-- backend healthcheck: `http://localhost:8000/health`
-- OpenAPI docs: `http://localhost:8000/docs`
-
-### Логин первого администратора
-
-По умолчанию из `deploy/.env.example`:
-
-```text
-admin@example.com
-change-me-admin-password
-```
-
-Перед реальным использованием пароль обязательно поменять.
-
-## Основные сценарии
-
-### Регистрация пользователя
-
-1. Пользователь открывает `http://localhost:5173`.
-2. Выбирает `Register`.
-3. Вводит email и пароль.
-4. Backend создает пользователя со статусом `pending`.
-5. Пользователь видит экран ожидания подтверждения.
-
-### Подтверждение пользователя администратором
-
-1. Admin входит в приложение.
-2. Открывает раздел `Admin`.
-3. Видит пользователя со статусом `pending`.
-4. Нажимает `Approve`.
-5. Пользователь получает статус `approved` и может войти.
-
-### Лимиты ключей
-
-У каждого пользователя есть `key_limit`.
-
-По умолчанию:
-
-```text
-DEFAULT_KEY_LIMIT=3
-```
-
-Администратор может менять лимит в разделе `Admin`.
-
-Обычный пользователь не может создать больше активных ключей, чем разрешено лимитом.
-
-### Dashboard и поиск
-
-Для администратора доступна отдельная вкладка `Dashboard`. Она показывает:
-
-- количество активных ключей;
-- пользователей в ожидании подтверждения;
-- приостановленных пользователей;
-- суммарную емкость по лимитам ключей;
-- recent users;
-- общий список ключей.
-
-Вкладки `Users` и `Keys` имеют локальный поиск:
-
-- `Search users` ищет по email, роли, статусу и лимиту;
-- `Search keys` ищет по имени ключа, UUID, SNI, типу и статусу.
-
-Frontend адаптирован под мобильные устройства:
-
-- на desktop используется sidebar;
-- на телефонах используется bottom navigation;
-- таблицы превращаются в карточки с touch-friendly actions;
-- анимации отключаются автоматически при `prefers-reduced-motion`.
-
-### Создание ключа пользователем
-
-1. Пользователь открывает раздел `Keys`.
-2. Вводит имя ключа.
-3. Выбирает тип:
-   - `TCP REALITY`;
-   - `XHTTP REALITY`.
-4. Опционально вводит SNI.
-5. Нажимает `Create key`.
-
-Если SNI не указан, backend использует первый SNI из `serverNames` соответствующего inbound в Xray config.
-
-Если SNI указан, но его нет в `serverNames`, backend вернет ошибку.
-
-### Отзыв ключа
-
-При отзыве ключа:
-
-1. Backend удаляет UUID из Xray config на relay.
-2. Проверяет новый config.
-3. Перезапускает Xray.
-4. В базе ключ получает статус `revoked`.
-
-Удаление сделано идемпотентным на уровне Xray: если UUID уже отсутствует, config все равно приводится к нужному состоянию.
-
-## Подготовка relay-сервера
-
-Backend ожидает, что на relay уже установлен Xray и существует рабочий config.
-
-Минимальные требования к relay:
-
-- Linux server с systemd.
-- Xray установлен как сервис `xray`.
-- SSH-доступ по приватному ключу.
-- Пользователь SSH имеет права:
-  - читать `/usr/local/etc/xray/config.json`;
-  - писать туда новый config;
-  - запускать `xray run -test`;
-  - выполнять `systemctl restart xray`;
-  - выполнять `systemctl is-active xray`.
-
-Проще всего использовать `root`, но для production лучше создать отдельного пользователя с ограниченным `sudo`.
-
-### Обязательные inbound tags
-
-Relay config должен содержать:
-
-```json
-{
-  "tag": "user-inbound"
-}
-```
-
-для TCP REALITY и:
-
-```json
-{
-  "tag": "user-inbound-xhttp"
-}
-```
-
-для XHTTP REALITY.
-
-Backend ищет inbounds именно по этим tag.
-
-### Генерация relay config legacy-скриптом
-
-Скрипт `generate_config.sh` был поправлен под web control plane:
-
-- закрыт heredoc relay-конфига;
-- исправлен невалидный JSON в XHTTP inbound;
-- `serverName` теперь пишется строкой;
-- XHTTP link использует порт `80`;
-- relay inbounds имеют нужные tags.
-
-Порядок legacy setup:
 
 ```bash
-./install_xray.sh <exit_ip> root "<exit_pass>"
-./install_xray.sh <relay_ip> root "<relay_pass>"
-./generate_config.sh <exit_ip> root "<exit_pass>" <relay_ip> root "<relay_pass>"
+# интерфейс с горячей перезагрузкой; /api и /sub проксируются на 127.0.0.1:8000
+cd frontend
+npm ci
+npm run dev
 ```
 
-После этого можно подключать backend к relay.
+Открыть `http://localhost:5173`, войти как `ADMIN_EMAIL` / `ADMIN_PASSWORD` из `deploy/.env`.
 
-## Production настройка
-
-### 1. Создать SSH key для backend
-
-На машине администратора:
+### Сборка
 
 ```bash
-ssh-keygen -t ed25519 -f xray_control_plane_ed25519 -C "xray-control-plane"
+cd server
+make web SITE_NAME=example   # собрать интерфейс и вшить его в бинарник
+make test                    # go vet + go test
+make build VERSION=v2.0.0    # dist/xray-panel-linux-amd64 и dist/xray-panel-linux-arm64
+make web-reset               # вернуть заглушку интерфейса перед коммитом
 ```
 
-Публичный ключ добавить на relay:
+Бинарники статические (`CGO_ENABLED=0`, SQLite — `modernc.org/sqlite`), подходят для любого Linux.
+`SITE_NAME` попадает в заголовок страницы («Личный кабинет example»); слов «VPN» в интерфейсе входа нет.
 
-```bash
-ssh-copy-id -i xray_control_plane_ed25519.pub root@<relay_ip>
-```
+## Настройки
 
-Или вручную добавить `.pub` ключ в:
+Читаются из окружения процесса; с флагом `--env-file` — ещё и из файла (окружение важнее).
 
-```text
-/root/.ssh/authorized_keys
-```
-
-Приватный ключ положить в:
-
-```text
-deploy/secrets/xray_ssh_key
-```
-
-### 2. Настроить `deploy/.env`
-
-Скопировать пример:
-
-```bash
-cd deploy
-cp .env.example .env
-```
-
-Минимально изменить:
-
-```env
-JWT_SECRET=long-random-production-secret
-COOKIE_SECURE=true
-CORS_ORIGINS=https://your-domain.example
-
-ADMIN_EMAIL=admin@your-domain.example
-ADMIN_PASSWORD=very-strong-password
-
-XRAY_RELAY_HOST=<relay_ip_or_dns>
-XRAY_RELAY_PORT=22
-XRAY_RELAY_USER=root
-XRAY_SSH_PRIVATE_KEY_PATH=/run/secrets/xray_ssh_key
-XRAY_CONFIG_PATH=/usr/local/etc/xray/config.json
-XRAY_DRY_RUN=false
-```
-
-Важно:
-
-- `JWT_SECRET` должен быть длинным случайным секретом.
-- `ADMIN_PASSWORD` после первого входа лучше заменить механизмом смены пароля в будущей версии или пересоздать admin вручную.
-- `COOKIE_SECURE=true` требует HTTPS.
-
-### 3. Запустить production stack
-
-```bash
-cd deploy
-docker compose up --build -d
-```
-
-Проверить:
-
-```bash
-docker compose ps
-docker compose logs backend
-docker compose logs frontend
-```
-
-Healthcheck:
-
-```bash
-curl http://localhost:8000/health
-```
-
-### 4. HTTPS и reverse proxy
-
-Для production рекомендуется ставить reverse proxy перед frontend/backend:
-
-- Caddy;
-- nginx;
-- Traefik.
-
-Типовая схема:
-
-```text
-https://vpn-panel.example.com      -> frontend:5173
-https://vpn-panel.example.com/api  -> backend:8000
-```
-
-Если frontend и backend находятся за одним доменом, cookies работают проще и безопаснее.
-
-### 5. Firewall
-
-На сервере с panel:
-
-- открыть `80/tcp` и `443/tcp` для reverse proxy;
-- не открывать Postgres наружу;
-- backend port `8000` лучше держать только во внутренней Docker network или за reverse proxy.
-
-На relay:
-
-- открыть VPN порты:
-  - `443/tcp` для TCP REALITY;
-  - `80/tcp` для XHTTP REALITY, если используется;
-- открыть `22/tcp` только для trusted IP, если возможно.
-
-## Переменные окружения backend
-
-| Переменная | Назначение |
-|---|---|
-| `DATABASE_URL` | SQLAlchemy URL Postgres |
-| `JWT_SECRET` | секрет подписи JWT |
-| `COOKIE_SECURE` | secure cookies, должно быть `true` на HTTPS |
-| `CORS_ORIGINS` | разрешенные origins frontend |
-| `ADMIN_EMAIL` | email seed admin |
-| `ADMIN_PASSWORD` | пароль seed admin |
-| `DEFAULT_KEY_LIMIT` | лимит ключей по умолчанию |
-| `XRAY_RELAY_HOST` | адрес relay |
-| `XRAY_RELAY_PORT` | SSH port relay |
-| `XRAY_RELAY_USER` | SSH user |
-| `XRAY_SSH_PRIVATE_KEY_PATH` | путь к private key внутри контейнера |
-| `XRAY_CONFIG_PATH` | путь к Xray config на relay |
-| `XRAY_DRY_RUN` | mock режим без реального relay |
+| Переменная | По умолчанию | Назначение |
+|---|---|---|
+| `DATABASE_URL` | `sqlite:///panel.db` | путь к SQLite: `sqlite:////абсолютный/путь.db` |
+| `JWT_SECRET` | `change-me-in-production` | секрет подписи сессий, от 16 символов; своё значение обязательно |
+| `ACCESS_TOKEN_MINUTES` | `1440` | время жизни сессии |
+| `COOKIE_SECURE` | `false` | `true` на HTTPS |
+| `CORS_ORIGINS` | `http://localhost:5173,…` | разрешённые origin через запятую |
+| `PUBLIC_BASE_URL` | `http://localhost:5173` | адрес кабинета для ссылок подписки |
+| `SUBSCRIPTION_TITLE` | `Personal` | название профиля в клиентах |
+| `SUBSCRIPTION_UPDATE_HOURS` | `12` | как часто клиенты обновляют подписку |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | — | первый администратор (`seed-admin`) |
+| `DEFAULT_KEY_LIMIT` | `3` | лимит ключей нового пользователя |
+| `AUTH_RATE_LIMIT`, `AUTH_RATE_WINDOW_SECONDS` | `10`, `300` | попыток входа с одного IP за окно |
+| `TRUSTED_PROXIES` | `127.0.0.1,::1` | от кого принимать `X-Forwarded-For` |
+| `LISTEN_ADDR` | `127.0.0.1:8000` | адрес HTTP-сервера |
+| `XRAY_MODE` | `dry_run` | `local` — Xray на этом сервере; `dry_run` — имитация |
+| `XRAY_PUBLIC_HOST` | `127.0.0.1` | домен VPN в ссылках `vless://` |
+| `XRAY_CONFIG_PATH` | `/usr/local/etc/xray/config.json` | конфиг Xray |
+| `XRAY_BACKUP_DIR`, `XRAY_BACKUP_KEEP` | `/var/lib/xray-panel/backups`, `30` | резервные копии конфига |
+| `XRAY_LOCK_PATH` | `/run/xray-panel/config.lock` | файловая блокировка правок |
+| `XRAY_BINARY` | `xray` | путь к бинарнику Xray |
+| `XRAY_API_SERVER` | `127.0.0.1:10085` | API Xray |
+| `XRAY_RESTART_COMMAND` | `systemctl restart xray` | запасной вариант, если API недоступно |
+| `XRAY_XHTTP_PORT` | `2053` | порт XHTTP inbound |
+| `STATS_POLL_SECONDS`, `ONLINE_WINDOW_SECONDS` | `60`, `180` | сбор статистики и окно «онлайн» |
 
 ## API
 
-Backend поднимает OpenAPI документацию:
+Всё под `/api`, авторизация — httpOnly cookie с JWT.
 
 ```text
-http://localhost:8000/docs
-```
+GET    /api/health
+POST   /api/auth/register | /api/auth/login | /api/auth/logout | /api/auth/password
+GET    /api/auth/me
 
-Основные endpoints:
+GET    /api/keys                          свои ключи со ссылками, трафиком и онлайном
+POST   /api/keys                          создать ключ {"name": "..."}
+DELETE /api/keys/{key_id}                 отозвать свой ключ
+GET    /api/keys/subscription             ссылка-подписка
+POST   /api/keys/subscription/rotate      перевыпустить подписку
 
-```text
-POST   /auth/register
-POST   /auth/login
-POST   /auth/logout
-GET    /auth/me
+GET    /api/admin/users                   пользователи со счётчиками ключей и трафика
+GET    /api/admin/users/{user_id}/keys
+POST   /api/admin/users/{user_id}/approve | suspend | restore
+PATCH  /api/admin/users/{user_id}/limits  {"key_limit": N}
+POST   /api/admin/users/{user_id}/keys    создать ключ за пользователя
+GET    /api/admin/keys                    все ключи с email владельца
+DELETE /api/admin/keys/{key_id}
+POST   /api/admin/keys/import             импорт ключей из конфига Xray
+GET    /api/admin/audit                   журнал действий
 
-GET    /keys
-POST   /keys
-DELETE /keys/{key_id}
-
-GET    /admin/users
-GET    /admin/users/{user_id}/keys
-GET    /admin/keys
-POST   /admin/users/{user_id}/approve
-POST   /admin/users/{user_id}/suspend
-POST   /admin/users/{user_id}/restore
-PATCH  /admin/users/{user_id}/limits
-POST   /admin/users/{user_id}/keys
-DELETE /admin/keys/{key_id}
+GET    /sub/{token}                       подписка (без авторизации)
 ```
 
 ## База данных
 
-Используются таблицы:
+SQLite, таблицы `users`, `vpn_keys`, `audit_logs` и служебная `alembic_version`. Схема совместима с
+прежней Python-версией (ревизия `0002_panel_v2`), поэтому обновление не требует переноса данных:
+`serve` при старте сам выполняет `migrate`. Пароли — bcrypt.
 
-- `users`
-- `vpn_keys`
-- `audit_logs`
+Резервная копия — просто файл: `sqlite3 /var/lib/xray-panel/panel.db ".backup /root/panel.db"`.
 
-Миграции Alembic находятся в:
+## Диагностика
 
-```text
-backend/alembic/
-```
-
-При старте backend container выполняет:
-
-```bash
-alembic upgrade head
-python -m app.seed_admin
-uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-
-## Тесты и проверки
-
-Backend:
-
-```bash
-cd backend
-py -m pip install -e ".[dev]"
-py -m pytest
-py -m ruff check .
-```
-
-Frontend:
-
-```bash
-cd frontend
-npm install
-npm run build
-npm audit --audit-level=moderate
-```
-
-Docker:
-
-```bash
-docker compose -f deploy/docker-compose.yml config
-docker compose -f deploy/docker-compose.yml build
-```
-
-## Что важно доделать перед серьезным production
-
-Текущая версия уже дает рабочий control plane, но перед коммерческим production стоит добавить:
-
-1. Смену пароля пользователем и админом.
-2. Refresh token или короткоживущий access token с refresh-cookie.
-3. Rate limiting для `/auth/login` и `/auth/register`.
-4. CSRF protection для cookie-based auth.
-5. Более строгую password policy.
-6. Email verification или invite-only регистрацию.
-7. UI для просмотра audit logs.
-8. Backup policy для Postgres.
-9. Monitoring backend/frontend/Postgres.
-10. Отдельного non-root SSH пользователя на relay с ограниченным sudo.
-11. Проверку, что `xray run -test` и `systemctl restart xray` разрешены только нужному пользователю.
-12. Ротацию `JWT_SECRET` и SSH ключей по регламенту.
-13. Nginx/Caddy HTTPS reverse proxy.
-14. CI pipeline: backend tests, frontend build, docker build.
-
-## Приостановка и восстановление доступа
-
-Кнопка `Suspend` переводит пользователя в статус `suspended`. Такой пользователь не может
-авторизоваться в приложении, но его запись и ключи остаются в базе.
-
-Кнопка `Restore` переводит пользователя обратно в `approved`. После этого пользователь снова
-может войти в приложение. Ключи пользователя не пересоздаются автоматически.
-
-## Быстрый troubleshooting
-
-### Backend не стартует
-
-Проверить:
-
-```bash
-docker compose logs backend
-```
-
-Частые причины:
-
-- неправильный `DATABASE_URL`;
-- Postgres еще не healthy;
-- слабый или пустой `JWT_SECRET`;
-- ошибка миграции.
-
-### Ключ не создается
-
-Проверить:
-
-```bash
-docker compose logs backend
-```
-
-Если `XRAY_DRY_RUN=false`, частые причины:
-
-- backend не может подключиться по SSH;
-- private key неверный или не имеет прав;
-- relay config не содержит нужных inbound tags;
-- `xray run -test` падает;
-- `systemctl restart xray` требует sudo/root;
-- SNI не входит в `serverNames`.
-
-### Пользователь не может войти
-
-Проверить статус пользователя в admin UI:
-
-- `pending` - нужно нажать `Approve`;
-- `suspended` - пользователь заблокирован;
-- `approved` - можно входить.
-
-### Cookies не работают в production
-
-Проверить:
-
-- frontend/backend на одном домене или корректно настроен CORS;
-- `CORS_ORIGINS` содержит точный origin frontend;
-- `COOKIE_SECURE=true` используется только с HTTPS;
-- reverse proxy прокидывает headers корректно.
+- Логи кабинета: `journalctl -u xray-panel -f` (каждый запрос: метод, путь, код, время).
+- Кабинет не стартует — чаще всего ошибка в `/etc/xray-panel/panel.env`: текст есть в логе.
+- Ключ не создаётся (502) — конфиг не прошёл `xray run -test` или нет прав на запись в
+  `/usr/local/etc/xray`; подробности в логе, прежний конфиг не тронут.
+- Ключ создан, но не подключается — проверьте `xray api statsgetallonlineusers -s 127.0.0.1:10085`
+  и что в `config.json` UUID есть во всех трёх inbound.
+- Не сохраняется вход — на HTTPS должен быть `COOKIE_SECURE=true`, а открывать кабинет нужно по
+  адресу из `PUBLIC_BASE_URL`.
