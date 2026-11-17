@@ -1,2 +1,2 @@
-export type AppView = "dashboard" | "keys" | "admin";
+export type AppView = "dashboard" | "keys" | "admin" | "audit" | "profile";
 export type AuthMode = "login" | "register";

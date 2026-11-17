@@ -1,23 +1,39 @@
-import { VpnKey } from "./api";
+const dateFormat = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", year: "numeric" });
+const dateTimeFormat = new Intl.DateTimeFormat("ru-RU", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit"
+});
 
 export function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(
-    new Date(value)
-  );
+  return dateFormat.format(new Date(value));
 }
 
-export function downloadJson(key: VpnKey) {
-  const blob = new Blob([JSON.stringify(key.client_config_json, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${key.name}_xhttp_config.json`;
-  link.click();
-  URL.revokeObjectURL(url);
+export function formatDateTime(value: string) {
+  return dateTimeFormat.format(new Date(value));
+}
+
+export function formatBytes(bytes: number) {
+  if (!bytes || bytes < 0) return "0 КБ";
+  const units = ["Б", "КБ", "МБ", "ГБ", "ТБ"];
+  if (bytes < 1024) return `${bytes} Б`;
+  let value = bytes / 1024;
+  let unit = 1;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(value >= 100 ? 0 : 1).replace(".", ",")} ${units[unit]}`;
 }
 
 export function matchesSearch(values: Array<string | number | null | undefined>, query: string) {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return true;
   return values.some((value) => String(value ?? "").toLowerCase().includes(normalized));
+}
+
+export async function copyText(text: string) {
+  await navigator.clipboard.writeText(text);
 }

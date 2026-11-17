@@ -1,7 +1,8 @@
 import { FormEvent, useState } from "react";
-import { ShieldCheck } from "lucide-react";
+import { UserRound } from "lucide-react";
 import { api, User } from "../api";
 import { AuthMode } from "../types";
+import { PAGE_TITLE, SITE_NAME } from "../brand";
 
 export function AuthScreen({ onAuthed }: { onAuthed: (user: User) => void }) {
   const [mode, setMode] = useState<AuthMode>("login");
@@ -18,7 +19,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (user: User) => void }) {
       const session = mode === "login" ? await api.login(email, password) : await api.register(email, password);
       onAuthed(session.user);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Request failed");
+      setError(err instanceof Error ? err.message : "Ошибка запроса");
     } finally {
       setPending(false);
     }
@@ -28,27 +29,27 @@ export function AuthScreen({ onAuthed }: { onAuthed: (user: User) => void }) {
     <main className="auth-page">
       <section className="auth-copy animate-in">
         <div className="brand-mark">
-          <ShieldCheck size={28} />
-          <span>Xray Control</span>
+          <UserRound size={28} />
+          {SITE_NAME && <span>{SITE_NAME}</span>}
         </div>
-        <h1>Manage VPN access.</h1>
-        <p>Sign in or request approval.</p>
+        <h1>{PAGE_TITLE}</h1>
+        <p>Войдите или зарегистрируйтесь — доступ откроется после подтверждения администратором.</p>
       </section>
       <form className="auth-panel animate-in delay-1" onSubmit={submit}>
         <div className="segmented">
           <button type="button" className={mode === "login" ? "active" : ""} onClick={() => setMode("login")}>
-            Login
+            Вход
           </button>
           <button type="button" className={mode === "register" ? "active" : ""} onClick={() => setMode("register")}>
-            Register
+            Регистрация
           </button>
         </div>
         <label>
-          Email
+          Эл. почта
           <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
         </label>
         <label>
-          Password
+          Пароль
           <input
             value={password}
             onChange={(event) => setPassword(event.target.value)}
@@ -59,7 +60,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (user: User) => void }) {
         </label>
         {error && <p className="error">{error}</p>}
         <button className="primary" disabled={pending}>
-          {pending ? "Please wait..." : mode === "login" ? "Login" : "Create account"}
+          {pending ? "Подождите..." : mode === "login" ? "Войти" : "Создать аккаунт"}
         </button>
       </form>
     </main>

@@ -71,8 +71,13 @@ export function AdminUsers({
       await action();
       await loadUsers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update user");
+      setError(err instanceof Error ? err.message : "Не удалось обновить пользователя");
     }
+  }
+
+  async function suspend(userId: number) {
+    if (!window.confirm("Ключи пользователя перестанут работать. Заблокировать?")) return;
+    await mutateUser(() => api.suspendUser(userId));
   }
 
   async function setLimit(userId: number, value: number) {
@@ -85,18 +90,18 @@ export function AdminUsers({
         <div className="stack">
           {showWidgets && (
             <div className="metrics-strip non-dashboard-metrics collapsible-widgets">
-              <StatCard label="Approved" value={stats.approved} helper="Can sign in" icon={CheckCircle2} tone="good" />
-              <StatCard label="Pending" value={stats.pending} helper="Need approval" icon={Clock3} tone="warn" />
-              <StatCard label="Suspended" value={stats.suspended} helper="Access paused" icon={ShieldAlert} tone="danger" />
-              <StatCard label="Users" value={users.length} helper="Total accounts" icon={Users} />
+              <StatCard label="Подтверждены" value={stats.approved} helper="Могут входить" icon={CheckCircle2} tone="good" />
+              <StatCard label="Ждут" value={stats.pending} helper="Нужно подтвердить" icon={Clock3} tone="warn" />
+              <StatCard label="Заблокированы" value={stats.suspended} helper="Доступ приостановлен" icon={ShieldAlert} tone="danger" />
+              <StatCard label="Пользователи" value={users.length} helper="Всего аккаунтов" icon={Users} />
             </div>
           )}
           <div className="toolbar-panel sticky-toolbar">
-            <SearchBox value={query} onChange={setQuery} placeholder={isMobile ? "Search users" : "Search users by email, status, role..."} />
+            <SearchBox value={query} onChange={setQuery} placeholder={isMobile ? "Поиск пользователей" : "Поиск по почте, статусу, роли..."} />
             <div className="toolbar-actions">
               <button className="small ghost widgets-toggle" type="button" onClick={() => setShowWidgets((current) => !current)}>
                 {showWidgets ? <EyeOff size={15} /> : <Eye size={15} />}
-                <span>{showWidgets ? "Hide widgets" : "Show widgets"}</span>
+                <span>{showWidgets ? "Скрыть виджеты" : "Показать виджеты"}</span>
               </button>
             </div>
           </div>
@@ -121,7 +126,7 @@ export function AdminUsers({
                       setSelected(null);
                       setShowCreate(false);
                     }}
-                    title="Back to users"
+                    title="К списку пользователей"
                   >
                     <ArrowLeft size={16} />
                   </button>
@@ -129,15 +134,15 @@ export function AdminUsers({
                 <div className="selected-user-copy">
                   <div className="selected-user-title-line">
                     <h2>{selected.email}</h2>
-                    <Status status={selected.status} />
+                    <Status status={selected.status} kind="user" />
                   </div>
-                  <p className="selected-user-subtitle">Created {formatDate(selected.created_at)} / Limit {selected.key_limit}</p>
+                  <p className="selected-user-subtitle">Регистрация: {formatDate(selected.created_at)} / Лимит {selected.key_limit}</p>
                 </div>
               </div>
             </div>
             <div className="selected-user-toolbar">
               <label className="limit-field compact">
-                <span>Limit</span>
+                <span>Лимит</span>
                 <input
                   className="limit-input"
                   type="number"
@@ -150,17 +155,17 @@ export function AdminUsers({
               <div className="user-buttons compact">
                 {selected.status === "pending" && (
                   <button className="small action-chip" onClick={() => mutateUser(() => api.approveUser(selected.id))}>
-                    Approve
+                    Подтвердить
                   </button>
                 )}
                 {selected.id !== currentUser.id && selected.status !== "suspended" && (
-                  <button className="small ghost action-chip" onClick={() => mutateUser(() => api.suspendUser(selected.id))}>
-                    Suspend
+                  <button className="small ghost action-chip" onClick={() => suspend(selected.id)}>
+                    Заблокировать
                   </button>
                 )}
                 {selected.status === "suspended" && (
                   <button className="small action-chip" onClick={() => mutateUser(() => api.restoreUser(selected.id))}>
-                    Restore
+                    Восстановить
                   </button>
                 )}
               </div>
@@ -172,8 +177,8 @@ export function AdminUsers({
                     user={selected}
                     compact
                     onClose={() => setShowCreate(false)}
-                    onCreate={async (payload) => {
-                      await api.adminCreateKey(selected.id, payload);
+                    onCreate={async (name) => {
+                      await api.adminCreateKey(selected.id, name);
                       await loadKeys(selected.id);
                       setShowCreate(false);
                     }}
@@ -181,15 +186,15 @@ export function AdminUsers({
                 ) : (
                   <button className="primary mobile-create-button" onClick={() => setShowCreate(true)}>
                     <Plus size={17} />
-                    New key
+                    Новый ключ
                   </button>
                 )
               ) : (
                 <CreateKeyForm
                   user={selected}
                   compact
-                  onCreate={async (payload) => {
-                    await api.adminCreateKey(selected.id, payload);
+                  onCreate={async (name) => {
+                    await api.adminCreateKey(selected.id, name);
                     await loadKeys(selected.id);
                   }}
                 />
@@ -205,7 +210,7 @@ export function AdminUsers({
           />
         </div>
       ) : isMobile ? (
-        <div className="empty-panel">Choose a user to manage access and keys</div>
+        <div className="empty-panel">Выберите пользователя, чтобы управлять доступом и ключами</div>
       ) : null}
     </section>
   );
@@ -225,8 +230,8 @@ function UserPicker({
   return (
     <div className="user-picker animate-in">
       <div className="panel-heading">
-        <h2>Users</h2>
-        <span>{users.length} shown</span>
+        <h2>Пользователи</h2>
+        <span>показано: {users.length}</span>
       </div>
       <div className="user-list">
         {users.map((item) => (
@@ -244,16 +249,16 @@ function UserPicker({
               <div className="user-row-top">
                 <strong>{item.email}</strong>
                 <div className="user-row-badges">
-                  {item.id === currentUser.id && <span className="status approved">You</span>}
-                  <Status status={item.status} />
+                  {item.id === currentUser.id && <span className="status approved">Вы</span>}
+                  <Status status={item.status} kind="user" />
                 </div>
               </div>
-              <span>{item.role === "admin" ? "Administrator" : "User"} / Limit {item.key_limit} / {formatDate(item.created_at)}</span>
+              <span>{item.role === "admin" ? "Администратор" : "Пользователь"} / Лимит {item.key_limit} / {formatDate(item.created_at)}</span>
             </div>
             <ChevronRight size={16} className="user-row-arrow" />
           </div>
         ))}
-        {users.length === 0 && <div className="empty">No users found</div>}
+        {users.length === 0 && <div className="empty">Пользователи не найдены</div>}
       </div>
     </div>
   );

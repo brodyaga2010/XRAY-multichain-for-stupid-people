@@ -6,11 +6,11 @@ export function PendingScreen({ user, onLogout }: { user: User; onLogout: () => 
     <main className="pending-page">
       <div className="pending-box animate-in">
         <CheckCircle2 size={40} />
-        <h1>Waiting for administrator approval</h1>
-        <p>{user.email} is registered. Access opens after approval.</p>
-        <div className="pending-note">You will be able to create and manage VPN keys as soon as the account status changes to approved.</div>
+        <h1>Ожидание подтверждения администратором</h1>
+        <p>{user.email} зарегистрирован. Доступ откроется после подтверждения.</p>
+        <div className="pending-note">Вы сможете создавать ключи доступа, как только аккаунт будет подтверждён.</div>
         <button className="ghost" onClick={onLogout}>
-          Logout
+          Выйти
         </button>
       </div>
     </main>

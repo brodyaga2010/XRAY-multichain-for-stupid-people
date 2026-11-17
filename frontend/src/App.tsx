@@ -16,7 +16,7 @@ export function App() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="boot">Loading control plane...</div>;
+  if (loading) return <div className="boot">Загрузка...</div>;
   if (!user) return <AuthScreen onAuthed={setUser} />;
   if (user.status !== "approved") return <PendingScreen user={user} onLogout={() => logout(setUser)} />;
 

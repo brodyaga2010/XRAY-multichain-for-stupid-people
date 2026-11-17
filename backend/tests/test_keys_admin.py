@@ -15,8 +15,8 @@ def test_key_limit_blocks_create_over_limit(client: TestClient, db: Session) -> 
     make_user(db, email="user@example.com", key_limit=1)
     login(client, "user@example.com")
 
-    first = client.post("/keys", json={"name": "phone", "type": "tcp_reality"})
-    second = client.post("/keys", json={"name": "laptop", "type": "tcp_reality"})
+    first = client.post("/keys", json={"name": "phone"})
+    second = client.post("/keys", json={"name": "laptop"})
 
     assert first.status_code == 201
     assert second.status_code == 409
@@ -96,7 +96,7 @@ def test_audit_log_written_for_create_and_revoke(client: TestClient, db: Session
     make_user(db, email="user@example.com")
     login(client, "user@example.com")
 
-    created = client.post("/keys", json={"name": "phone", "type": "tcp_reality"})
+    created = client.post("/keys", json={"name": "phone"})
     key_id = created.json()["id"]
     revoked = client.delete(f"/keys/{key_id}")
 

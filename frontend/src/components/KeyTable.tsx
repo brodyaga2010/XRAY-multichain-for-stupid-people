@@ -1,91 +1,104 @@
-import { Copy, Download, Trash2 } from "lucide-react";
+import { Link2, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { VpnKey } from "../api";
-import { downloadJson, formatDate } from "../utils";
+import { KeyStatus, VpnKey } from "../api";
+import { formatDate } from "../utils";
+import { OnlineIndicator, Traffic } from "./KeyActivity";
+import { KeyModal } from "./KeyModal";
 import { Status } from "./Status";
 
-export function KeyTable({ keys, onRevoke }: { keys: VpnKey[]; onRevoke: (id: number) => void | Promise<void> }) {
-  const [activityFilter, setActivityFilter] = useState<"all" | "active" | "revoked">("all");
+type KeyFilter = "all" | KeyStatus;
+
+const filters: Array<{ id: KeyFilter; label: string }> = [
+  { id: "all", label: "Все" },
+  { id: "active", label: "Активные" },
+  { id: "suspended", label: "Отключённые" },
+  { id: "revoked", label: "Отозванные" }
+];
+
+export function KeyTable({
+  keys,
+  showOwner = false,
+  onRevoke
+}: {
+  keys: VpnKey[];
+  showOwner?: boolean;
+  onRevoke: (id: number) => void | Promise<void>;
+}) {
+  const [activityFilter, setActivityFilter] = useState<KeyFilter>("all");
+  const [openKeyId, setOpenKeyId] = useState<number | null>(null);
 
   const activeCount = useMemo(() => keys.filter((key) => key.status === "active").length, [keys]);
+  const openKey = keys.find((key) => key.id === openKeyId) ?? null;
   const visibleKeys = useMemo(() => {
-    const filtered = keys.filter((key) => {
-      if (activityFilter !== "all" && key.status !== activityFilter) return false;
-      return true;
-    });
-
-    return filtered.sort((a, b) => {
-      const left = new Date(a.created_at).getTime();
-      const right = new Date(b.created_at).getTime();
-      return right - left;
-    });
+    const filtered = keys.filter((key) => activityFilter === "all" || key.status === activityFilter);
+    return filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [activityFilter, keys]);
+  const columns = showOwner ? 7 : 6;
+
+  function confirmRevoke(key: VpnKey) {
+    if (window.confirm(`Отозвать ключ «${key.name}»?`)) void onRevoke(key.id);
+  }
 
   return (
     <div className="table-panel key-table animate-in">
       <div className="panel-heading">
-        <h2>Keys</h2>
-        <span>{activeCount} active</span>
+        <h2>Ключи</h2>
+        <span>активных: {activeCount}</span>
       </div>
       <div className="key-filter-bar">
         <div className="key-filter-segmented">
-          <button type="button" className={activityFilter === "all" ? "active" : ""} onClick={() => setActivityFilter("all")}>
-            All
-          </button>
-          <button
-            type="button"
-            className={activityFilter === "active" ? "active" : ""}
-            onClick={() => setActivityFilter("active")}
-          >
-            Active
-          </button>
-          <button
-            type="button"
-            className={activityFilter === "revoked" ? "active" : ""}
-            onClick={() => setActivityFilter("revoked")}
-          >
-            Revoked
-          </button>
+          {filters.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={activityFilter === item.id ? "active" : ""}
+              onClick={() => setActivityFilter(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
       </div>
       <div className="responsive-table">
         <table>
           <thead>
             <tr>
-              <th>Key</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Created</th>
+              <th>Ключ</th>
+              {showOwner && <th>Владелец</th>}
+              <th>Статус</th>
+              <th>Активность</th>
+              <th>Трафик</th>
+              <th>Создан</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {visibleKeys.map((key) => (
               <tr key={key.id}>
-                <td data-label="Key">
+                <td data-label="Ключ">
                   <div className="table-key">
                     <strong>{key.name}</strong>
-                    <span>
-                      {shortUuid(key.uuid)} / {key.sni || "Default SNI"}
-                    </span>
                   </div>
                 </td>
-                <td data-label="Type">{key.type === "tcp_reality" ? "TCP REALITY" : "XHTTP REALITY"}</td>
-                <td data-label="Status">
+                {showOwner && <td data-label="Владелец">{key.owner_email ?? "—"}</td>}
+                <td data-label="Статус">
                   <Status status={key.status} />
                 </td>
-                <td data-label="Created">{formatDate(key.created_at)}</td>
+                <td data-label="Активность">
+                  <OnlineIndicator keyItem={key} />
+                </td>
+                <td data-label="Трафик">
+                  <Traffic keyItem={key} />
+                </td>
+                <td data-label="Создан">{formatDate(key.created_at)}</td>
                 <td className="row-actions">
-                  <button className="icon-button" title="Copy VLESS link" onClick={() => navigator.clipboard.writeText(key.connection_uri)}>
-                    <Copy size={17} />
-                  </button>
-                  {key.client_config_json && (
-                    <button className="icon-button" title="Download XHTTP JSON" onClick={() => downloadJson(key)}>
-                      <Download size={17} />
+                  {key.status !== "revoked" && (
+                    <button className="small ghost" title="Подключить" onClick={() => setOpenKeyId(key.id)}>
+                      <Link2 size={15} /> Подключить
                     </button>
                   )}
-                  {key.status === "active" && (
-                    <button className="icon-button danger" title="Revoke" onClick={() => onRevoke(key.id)}>
+                  {key.status !== "revoked" && (
+                    <button className="icon-button danger" title="Отозвать" onClick={() => confirmRevoke(key)}>
                       <Trash2 size={17} />
                     </button>
                   )}
@@ -94,8 +107,8 @@ export function KeyTable({ keys, onRevoke }: { keys: VpnKey[]; onRevoke: (id: nu
             ))}
             {visibleKeys.length === 0 && (
               <tr>
-                <td colSpan={5} className="empty">
-                  No keys match filters
+                <td colSpan={columns} className="empty">
+                  Ключей нет
                 </td>
               </tr>
             )}
@@ -108,40 +121,32 @@ export function KeyTable({ keys, onRevoke }: { keys: VpnKey[]; onRevoke: (id: nu
             <div className="key-card-head">
               <div className="key-card-title">
                 <strong>{key.name}</strong>
-                <span className="key-card-subtitle">
-                  {key.type === "tcp_reality" ? "TCP REALITY" : "XHTTP REALITY"}
-                  {key.sni ? ` / ${key.sni}` : " / No SNI"}
-                </span>
+                {showOwner && key.owner_email && <span className="key-card-subtitle">{key.owner_email}</span>}
               </div>
               <Status status={key.status} />
             </div>
-            <div className="key-card-meta">Created {formatDate(key.created_at)}</div>
-            <div className="key-card-actions">
-              <button className="ghost action-button icon-only-mobile" title="Copy VLESS link" onClick={() => navigator.clipboard.writeText(key.connection_uri)}>
-                <Copy size={16} />
-                <span>Copy</span>
-              </button>
-              {key.client_config_json && (
-                <button className="ghost action-button icon-only-mobile" title="Download JSON" onClick={() => downloadJson(key)}>
-                  <Download size={16} />
-                  <span>JSON</span>
-                </button>
-              )}
-              {key.status === "active" && (
-                <button className="ghost action-button danger icon-only-mobile" title="Revoke key" onClick={() => onRevoke(key.id)}>
-                  <Trash2 size={16} />
-                  <span>Revoke</span>
-                </button>
-              )}
+            <div className="key-card-meta">
+              <OnlineIndicator keyItem={key} />
+              <Traffic keyItem={key} />
+              <span>Создан {formatDate(key.created_at)}</span>
             </div>
+            {key.status !== "revoked" && (
+              <div className="key-card-actions">
+                <button className="ghost action-button" onClick={() => setOpenKeyId(key.id)}>
+                  <Link2 size={16} />
+                  <span>Подключить</span>
+                </button>
+                <button className="ghost action-button danger icon-only-mobile" title="Отозвать ключ" onClick={() => confirmRevoke(key)}>
+                  <Trash2 size={16} />
+                  <span>Отозвать</span>
+                </button>
+              </div>
+            )}
           </article>
         ))}
-        {visibleKeys.length === 0 && <div className="empty">No keys match filters</div>}
+        {visibleKeys.length === 0 && <div className="empty">Ключей нет</div>}
       </div>
+      {openKey && <KeyModal keyItem={openKey} onClose={() => setOpenKeyId(null)} />}
     </div>
   );
-}
-
-function shortUuid(value: string) {
-  return value.slice(0, 8);
 }

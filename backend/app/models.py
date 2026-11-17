@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy import JSON, BigInteger, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -19,12 +19,17 @@ class UserStatus(StrEnum):
 
 
 class KeyType(StrEnum):
+    # Один UUID во всех inbound входного сервера: TCP, gRPC и XHTTP
+    MULTI = "multi"
+    # Устаревшие типы первой версии панели
     TCP_REALITY = "tcp_reality"
     XHTTP_REALITY = "xhttp_reality"
 
 
 class KeyStatus(StrEnum):
     ACTIVE = "active"
+    # Отключён вместе с владельцем (блокировка), вернётся при восстановлении
+    SUSPENDED = "suspended"
     REVOKED = "revoked"
 
 
@@ -37,6 +42,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(32), default=UserRole.USER.value, nullable=False)
     status: Mapped[str] = mapped_column(String(32), default=UserStatus.PENDING.value, nullable=False)
     key_limit: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
+    sub_token: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -59,6 +65,9 @@ class VpnKey(Base):
     short_id: Mapped[str] = mapped_column(String(64), nullable=False)
     connection_uri: Mapped[str] = mapped_column(Text, nullable=False)
     client_config_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    traffic_up: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    traffic_down: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

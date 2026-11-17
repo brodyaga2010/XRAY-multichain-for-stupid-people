@@ -1,7 +1,8 @@
 export type UserStatus = "pending" | "approved" | "suspended";
 export type UserRole = "user" | "admin";
-export type KeyType = "tcp_reality" | "xhttp_reality";
-export type KeyStatus = "active" | "revoked";
+export type KeyType = "multi" | "tcp_reality" | "xhttp_reality";
+export type KeyStatus = "active" | "suspended" | "revoked";
+export type LinkTransport = "tcp" | "grpc" | "xhttp";
 
 export interface User {
   id: number;
@@ -12,9 +13,16 @@ export interface User {
   created_at: string;
 }
 
+export interface KeyLink {
+  transport: LinkTransport;
+  label: string;
+  uri: string;
+}
+
 export interface VpnKey {
   id: number;
   owner_id: number;
+  owner_email: string | null;
   uuid: string;
   name: string;
   type: KeyType;
@@ -23,7 +31,22 @@ export interface VpnKey {
   public_key: string;
   short_id: string;
   connection_uri: string;
-  client_config_json: Record<string, unknown> | null;
+  links: KeyLink[];
+  traffic_up: number;
+  traffic_down: number;
+  last_seen_at: string | null;
+  online: boolean;
+  created_at: string;
+}
+
+export interface AuditEntry {
+  id: number;
+  actor_id: number | null;
+  actor_email: string | null;
+  action: string;
+  target_type: string | null;
+  target_id: string | number | null;
+  audit_metadata: Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -39,8 +62,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     }
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(body.detail ?? "Request failed");
+    const body = await response.json().catch(() => ({ detail: "Ошибка запроса" }));
+    throw new Error(typeof body.detail === "string" ? body.detail : "Ошибка запроса");
   }
   return response.json() as Promise<T>;
 }
@@ -59,8 +82,8 @@ export const api = {
     }),
   logout: () => request<{ message: string }>("/auth/logout", { method: "POST" }),
   keys: () => request<VpnKey[]>("/keys"),
-  createKey: (payload: { name: string; type: KeyType; sni?: string }) =>
-    request<VpnKey>("/keys", { method: "POST", body: JSON.stringify(payload) }),
+  createKey: (name: string) =>
+    request<VpnKey>("/keys", { method: "POST", body: JSON.stringify({ name }) }),
   revokeKey: (id: number) => request<{ message: string }>(`/keys/${id}`, { method: "DELETE" }),
   adminUsers: () => request<User[]>("/admin/users"),
   adminKeys: () => request<VpnKey[]>("/admin/keys"),
@@ -73,11 +96,20 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ key_limit })
     }),
-  adminCreateKey: (userId: number, payload: { name: string; type: KeyType; sni?: string }) =>
+  adminCreateKey: (userId: number, name: string) =>
     request<VpnKey>(`/admin/users/${userId}/keys`, {
       method: "POST",
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ name })
     }),
   adminRevokeKey: (keyId: number) =>
-    request<{ message: string }>(`/admin/keys/${keyId}`, { method: "DELETE" })
+    request<{ message: string }>(`/admin/keys/${keyId}`, { method: "DELETE" }),
+  adminImportKeys: () => request<{ imported: number }>("/admin/keys/import", { method: "POST" }),
+  adminAudit: (limit = 200) => request<AuditEntry[]>(`/admin/audit?limit=${limit}`),
+  subscription: () => request<{ url: string }>("/keys/subscription"),
+  rotateSubscription: () => request<{ url: string }>("/keys/subscription/rotate", { method: "POST" }),
+  changePassword: (current_password: string, new_password: string) =>
+    request<{ message: string }>("/auth/password", {
+      method: "POST",
+      body: JSON.stringify({ current_password, new_password })
+    })
 };

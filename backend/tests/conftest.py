@@ -9,16 +9,18 @@ from sqlalchemy.pool import StaticPool
 
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
 os.environ.setdefault("JWT_SECRET", "test-secret-that-is-long-enough")
-os.environ.setdefault("XRAY_DRY_RUN", "true")
+os.environ.setdefault("XRAY_MODE", "dry_run")
+os.environ.setdefault("XRAY_PUBLIC_HOST", "vpn.example.com")
 
-from app.database import Base, get_db  # noqa: E402
-from app.dependencies import get_xray_manager  # noqa: E402
-from app.main import app  # noqa: E402
-from app.models import User, UserRole, UserStatus  # noqa: E402
-from app.security import hash_password  # noqa: E402
-from app.services.xray_manager import DryRunXrayManager  # noqa: E402
-from app.config import settings  # noqa: E402
-
+from app.config import settings
+from app.database import Base, get_db
+from app.dependencies import get_xray_manager
+from app.main import app
+from app.models import User, UserRole, UserStatus
+from app.ratelimit import auth_limiter
+from app.security import hash_password
+from app.services.xray_manager import XrayManager, build_xray_manager
+from app.services.xray_runner import MemoryRunner
 
 engine = create_engine(
     "sqlite+pysqlite:///:memory:",
@@ -40,11 +42,23 @@ def db() -> Generator[Session, None, None]:
 
 
 @pytest.fixture()
-def client(db: Session) -> Generator[TestClient, None, None]:
+def xray() -> XrayManager:
+    return build_xray_manager(settings)
+
+
+@pytest.fixture()
+def runner(xray: XrayManager) -> MemoryRunner:
+    assert isinstance(xray.runner, MemoryRunner)
+    return xray.runner
+
+
+@pytest.fixture()
+def client(db: Session, xray: XrayManager) -> Generator[TestClient, None, None]:
     def override_db() -> Generator[Session, None, None]:
         yield db
 
-    manager = DryRunXrayManager(settings)
+    manager = xray
+    auth_limiter.reset()
     app.dependency_overrides[get_db] = override_db
     app.dependency_overrides[get_xray_manager] = lambda: manager
     with TestClient(app) as test_client:
