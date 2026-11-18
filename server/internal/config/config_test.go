@@ -152,7 +152,7 @@ func TestTelegramAdminChats(t *testing.T) {
 		wantErr bool
 	}{
 		{"", nil, false},
-		{"432739846", []int64{432739846}, false},
+		{"111222333", []int64{111222333}, false},
 		{" 1, -100200300 ,", []int64{1, -100200300}, false},
 		{"me", nil, true},
 	}
