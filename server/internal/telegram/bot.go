@@ -22,7 +22,13 @@ type Moderator interface {
 const (
 	actionApprove = "approve"
 	actionReject  = "reject"
+
+	// PendingButton — постоянная кнопка администратора: список заявок, ждущих решения.
+	PendingButton = "📋 Активные заявки"
 )
+
+// adminKeyboard — кнопка под полем ввода в чате администратора.
+var adminKeyboard = &ReplyKeyboard{Rows: [][]KeyboardButton{{{Text: PendingButton}}}, Resize: true, Persistent: true}
 
 // Bot присылает администраторам заявки на регистрацию и принимает нажатия «Подтвердить»/«Отклонить».
 // Работает через long polling: входящие порты и вебхуки не нужны.
@@ -79,8 +85,8 @@ func (b *Bot) Run(ctx context.Context) {
 	if len(b.chats) == 0 {
 		b.log.Warn("telegram: не задан TELEGRAM_ADMIN_CHAT_IDS — заявки отправлять некуда; напишите боту /start, он покажет chat id")
 	}
-	if err := b.api.SetMyCommands(ctx, map[string]string{"pending": "Заявки, ожидающие подтверждения"}); err != nil && ctx.Err() == nil {
-		b.log.Warn("telegram: меню команд не задано", "error", err)
+	if err := b.api.DeleteMyCommands(ctx); err != nil && ctx.Err() == nil {
+		b.log.Warn("telegram: меню команд не убрано", "error", err)
 	}
 
 	var offset int64
@@ -122,10 +128,12 @@ func (b *Bot) handleMessage(ctx context.Context, msg *Message) {
 		b.send(ctx, chat, fmt.Sprintf("Это служебный бот. Ваш chat id: <code>%d</code>", chat), nil)
 		return
 	}
-	command, _, _ := strings.Cut(strings.TrimSpace(msg.Text), " ")
+	text := strings.TrimSpace(msg.Text)
+	command, _, _ := strings.Cut(text, " ")
 	command, _, _ = strings.Cut(command, "@") // /pending@botname в группах
-	if command != "/pending" {
-		b.send(ctx, chat, "Я пришлю сюда каждую новую регистрацию с кнопками «Подтвердить» и «Отклонить».\n\n/pending — заявки, которые ждут решения.", nil)
+	if text != PendingButton && command != "/pending" {
+		b.send(ctx, chat, "Я пришлю сюда каждую новую регистрацию с кнопками «Подтвердить» и «Отклонить».\n\n"+
+			"Кнопка «"+PendingButton+"» внизу покажет все заявки, которые ждут решения.", adminKeyboard)
 		return
 	}
 	users, err := b.mod.PendingUsers(ctx)
@@ -135,9 +143,10 @@ func (b *Bot) handleMessage(ctx context.Context, msg *Message) {
 		return
 	}
 	if len(users) == 0 {
-		b.send(ctx, chat, "Новых заявок нет.", nil)
+		b.send(ctx, chat, "Новых заявок нет.", adminKeyboard)
 		return
 	}
+	b.send(ctx, chat, fmt.Sprintf("Ждут решения: %d", len(users)), adminKeyboard)
 	for _, user := range users {
 		b.send(ctx, chat, b.requestText(user, ""), moderationKeyboard(user.ID))
 	}
@@ -214,8 +223,8 @@ func statusName(status string) string {
 	return status
 }
 
-func (b *Bot) send(ctx context.Context, chat int64, text string, keyboard *InlineKeyboard) {
-	if err := b.api.SendMessage(ctx, chat, text, keyboard); err != nil {
+func (b *Bot) send(ctx context.Context, chat int64, text string, markup ReplyMarkup) {
+	if err := b.api.SendMessage(ctx, chat, text, markup); err != nil {
 		b.log.Warn("telegram: сообщение не отправлено", "chat_id", chat, "error", err)
 	}
 }

@@ -200,19 +200,29 @@ func TestHandleCallback(t *testing.T) {
 
 func TestHandleMessage(t *testing.T) {
 	pending := []store.User{{ID: 3, Email: "one@example.com"}, {ID: 4, Email: "two@example.com"}}
+	const (
+		noMarkup = ""
+		reply    = `"keyboard":[[{"text":"` + PendingButton + `"}]]`
+		inline   = `"callback_data":"approve:`
+	)
+	type sent struct{ text, markup string }
 	tests := []struct {
-		name      string
-		chat      int64
-		text      string
-		mod       *fakeModerator
-		wantTexts []string // подстроки отправленных сообщений по порядку
+		name string
+		chat int64
+		text string
+		mod  *fakeModerator
+		want []sent // подстроки текста и reply_markup отправленных сообщений по порядку
 	}{
-		{"чужой чат узнаёт свой id", 999, "/start", &fakeModerator{}, []string{"<code>999</code>"}},
-		{"админ: /start — справка", adminChat, "/start", &fakeModerator{}, []string{"/pending"}},
-		{"админ: заявок нет", adminChat, "/pending", &fakeModerator{}, []string{"Новых заявок нет"}},
-		{"админ: две заявки", adminChat, "/pending@panel_bot", &fakeModerator{pending: pending},
-			[]string{"one@example.com", "two@example.com"}},
-		{"админ: ошибка базы", adminChat, "/pending", &fakeModerator{err: errors.New("db")}, []string{"Не получилось"}},
+		{"чужой чат узнаёт свой id", 999, "/start", &fakeModerator{}, []sent{{"<code>999</code>", noMarkup}}},
+		{"админ: /start — справка и кнопка", adminChat, "/start", &fakeModerator{}, []sent{{PendingButton, reply}}},
+		{"админ: любой текст — справка и кнопка", adminChat, "привет", &fakeModerator{}, []sent{{"Отклонить", reply}}},
+		{"кнопка: заявок нет", adminChat, PendingButton, &fakeModerator{}, []sent{{"Новых заявок нет", reply}}},
+		{"кнопка: две заявки", adminChat, PendingButton, &fakeModerator{pending: pending},
+			[]sent{{"Ждут решения: 2", reply}, {"one@example.com", inline}, {"two@example.com", inline}}},
+		{"команда /pending тоже работает", adminChat, "/pending@panel_bot", &fakeModerator{pending: pending[:1]},
+			[]sent{{"Ждут решения: 1", reply}, {"one@example.com", inline}}},
+		{"кнопка: ошибка базы", adminChat, PendingButton, &fakeModerator{err: errors.New("db")}, []sent{{"Не получилось", noMarkup}}},
+		{"чужой чат нажал текст кнопки", 999, PendingButton, &fakeModerator{pending: pending}, []sent{{"<code>999</code>", noMarkup}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -220,13 +230,19 @@ func TestHandleMessage(t *testing.T) {
 
 			b.Handle(context.Background(), Update{Message: &Message{Chat: Chat{ID: tt.chat}, Text: tt.text}})
 
-			sent := f.callsOf("sendMessage")
-			if len(sent) != len(tt.wantTexts) {
-				t.Fatalf("sendMessage = %d, want %d", len(sent), len(tt.wantTexts))
+			calls := f.callsOf("sendMessage")
+			if len(calls) != len(tt.want) {
+				t.Fatalf("sendMessage = %d, want %d", len(calls), len(tt.want))
 			}
-			for i, want := range tt.wantTexts {
-				if sent[i].Params["chat_id"] != float64(tt.chat) || !strings.Contains(sent[i].Params["text"].(string), want) {
-					t.Errorf("сообщение %d = %v, want %q", i, sent[i].Params, want)
+			for i, want := range tt.want {
+				p := calls[i].Params
+				markup, _ := json.Marshal(p["reply_markup"])
+				if _, has := p["reply_markup"]; !has {
+					markup = nil
+				}
+				if p["chat_id"] != float64(tt.chat) || !strings.Contains(p["text"].(string), want.text) ||
+					(want.markup == noMarkup) != (markup == nil) || !strings.Contains(string(markup), want.markup) {
+					t.Errorf("сообщение %d: text=%q markup=%s, want %q / %q", i, p["text"], markup, want.text, want.markup)
 				}
 			}
 		})
@@ -259,8 +275,8 @@ func TestRunProcessesUpdatesAndAdvancesOffset(t *testing.T) {
 	if got := f.callsOf("getUpdates")[1].Params["offset"]; got != float64(42) {
 		t.Errorf("offset = %v, want 42", got)
 	}
-	if len(f.callsOf("setMyCommands")) != 1 {
-		t.Error("меню команд не задано")
+	if len(f.callsOf("deleteMyCommands")) != 1 {
+		t.Error("меню команд не убрано")
 	}
 }
 

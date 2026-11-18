@@ -73,10 +73,28 @@ type CallbackQuery struct {
 	Data    string   `json:"data,omitempty"`
 }
 
+// ReplyMarkup — разметка кнопок сообщения: InlineKeyboard или ReplyKeyboard.
+type ReplyMarkup interface{ isReplyMarkup() }
+
 // InlineKeyboard — кнопки под сообщением.
 type InlineKeyboard struct {
 	Rows [][]Button `json:"inline_keyboard"`
 }
+
+// ReplyKeyboard — постоянные кнопки под полем ввода; нажатие отправляет текст кнопки.
+type ReplyKeyboard struct {
+	Rows       [][]KeyboardButton `json:"keyboard"`
+	Resize     bool               `json:"resize_keyboard"`
+	Persistent bool               `json:"is_persistent"`
+}
+
+// KeyboardButton — кнопка ReplyKeyboard.
+type KeyboardButton struct {
+	Text string `json:"text"`
+}
+
+func (*InlineKeyboard) isReplyMarkup() {}
+func (*ReplyKeyboard) isReplyMarkup()  {}
 
 // Button — inline-кнопка с данными для callback.
 type Button struct {
@@ -142,11 +160,11 @@ func (c *Client) GetUpdates(ctx context.Context, offset int64, timeoutSec int) (
 	return updates, err
 }
 
-// SendMessage отправляет HTML-сообщение; keyboard может быть nil.
-func (c *Client) SendMessage(ctx context.Context, chatID int64, text string, keyboard *InlineKeyboard) error {
+// SendMessage отправляет HTML-сообщение; markup может быть nil.
+func (c *Client) SendMessage(ctx context.Context, chatID int64, text string, markup ReplyMarkup) error {
 	params := map[string]any{"chat_id": chatID, "text": text, "parse_mode": "HTML", "link_preview_options": map[string]bool{"is_disabled": true}}
-	if keyboard != nil {
-		params["reply_markup"] = keyboard
+	if markup != nil {
+		params["reply_markup"] = markup
 	}
 	return c.call(ctx, "sendMessage", params, nil)
 }
@@ -165,15 +183,7 @@ func (c *Client) AnswerCallbackQuery(ctx context.Context, id, text string) error
 	return c.call(ctx, "answerCallbackQuery", map[string]any{"callback_query_id": id, "text": text}, nil)
 }
 
-// SetMyCommands задаёт меню команд бота.
-func (c *Client) SetMyCommands(ctx context.Context, commands map[string]string) error {
-	type command struct {
-		Command     string `json:"command"`
-		Description string `json:"description"`
-	}
-	list := make([]command, 0, len(commands))
-	for name, description := range commands {
-		list = append(list, command{name, description})
-	}
-	return c.call(ctx, "setMyCommands", map[string]any{"commands": list}, nil)
+// DeleteMyCommands убирает меню команд бота (вместо команд — кнопка под полем ввода).
+func (c *Client) DeleteMyCommands(ctx context.Context) error {
+	return c.call(ctx, "deleteMyCommands", struct{}{}, nil)
 }
