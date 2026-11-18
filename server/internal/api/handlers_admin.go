@@ -109,7 +109,7 @@ func (a *App) adminActivate(w http.ResponseWriter, r *http.Request, action strin
 	if err != nil {
 		return err
 	}
-	updated, err := a.activateUser(detached(r), admin, user, action)
+	updated, err := a.activateUser(detached(r), admin, user, action, nil)
 	if err != nil {
 		return err
 	}
@@ -133,7 +133,7 @@ func (a *App) adminSuspend(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	updated, err := a.suspendUser(detached(r), admin, user)
+	updated, err := a.suspendUser(detached(r), admin, user, nil)
 	if err != nil {
 		return err
 	}

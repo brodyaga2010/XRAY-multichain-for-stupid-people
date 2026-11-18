@@ -59,6 +59,29 @@
 inbound, приводит `email` клиентов к UUID. Ключи, созданные раньше скриптами, администратор подтягивает
 кнопкой «Импортировать ключи с сервера».
 
+### Telegram-бот
+
+Если задан `TELEGRAM_BOT_TOKEN`, кабинет запускает бота (long polling — входящие порты и вебхуки не нужны):
+
+- о каждой новой регистрации бот пишет в чаты из `TELEGRAM_ADMIN_CHAT_IDS`: email, время, IP и кнопки
+  «✅ Подтвердить» / «⛔ Отклонить»;
+- нажатие меняет статус заявки так же, как кнопки в кабинете (отклонение = блокировка, её можно снять
+  в кабинете), в журнал действий пишется от имени первого администратора с пометкой `"via": "telegram"`;
+- если заявку уже решили в кабинете, бот ничего не меняет и сообщает текущий статус;
+- `/pending` — все заявки, которые ждут решения;
+- кнопки и команды принимаются только из чатов `TELEGRAM_ADMIN_CHAT_IDS`; любому другому чату бот
+  отвечает его chat id — так удобно узнать свой.
+
+Подключение: создайте бота у @BotFather, допишите в `/etc/xray-panel/panel.env`
+
+```bash
+TELEGRAM_BOT_TOKEN=123456:ABC...
+TELEGRAM_ADMIN_CHAT_IDS=111111111
+TZ=Europe/Moscow   # часовой пояс времени в сообщениях; по умолчанию время сервера
+```
+
+и выполните `systemctl restart xray-panel`. Свой chat id можно узнать, написав боту `/start`.
+
 ## Структура
 
 ```text
@@ -70,6 +93,7 @@ server/                     бэкенд на Go
   internal/ratelimit/       ограничение попыток входа
   internal/stats/           сбор трафика и онлайна
   internal/store/           SQLite: схема, миграции, запросы
+  internal/telegram/        клиент Bot API и бот заявок
   internal/web/             встроенный интерфейс (go:embed) и SPA-fallback
   internal/xray/            правка конфига, API Xray, ссылки vless://
   Makefile                  web / build / test
@@ -140,6 +164,10 @@ make web-reset               # вернуть заглушку интерфей�
 | `XRAY_RESTART_COMMAND` | `systemctl restart xray` | запасной вариант, если API недоступно |
 | `XRAY_XHTTP_PORT` | `2053` | порт XHTTP inbound |
 | `STATS_POLL_SECONDS`, `ONLINE_WINDOW_SECONDS` | `60`, `180` | сбор статистики и окно «онлайн» |
+| `TELEGRAM_BOT_TOKEN` | — | токен бота от @BotFather; пусто — бот выключен |
+| `TELEGRAM_ADMIN_CHAT_IDS` | — | chat id администраторов через запятую |
+| `TELEGRAM_API_URL` | `https://api.telegram.org` | адрес Bot API (например, свой прокси) |
+| `TZ` | время сервера | часовой пояс в сообщениях бота, например `Europe/Moscow` |
 
 ## API
 

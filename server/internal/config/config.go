@@ -48,6 +48,11 @@ type Config struct {
 	OnlineWindowSeconds int
 
 	ListenAddr string
+
+	// Telegram-бот для уведомлений администратору; пустой токен — бот выключен.
+	TelegramBotToken     string
+	TelegramAdminChatIDs string
+	TelegramAPIURL       string
 }
 
 // DefaultJWTSecret — значение по умолчанию, пригодное только для разработки.
@@ -81,6 +86,7 @@ func Defaults() Config {
 		StatsPollSeconds:        60,
 		OnlineWindowSeconds:     180,
 		ListenAddr:              "127.0.0.1:8000",
+		TelegramAPIURL:          "https://api.telegram.org",
 	}
 }
 
@@ -154,6 +160,9 @@ func Load(lookup Lookup) (*Config, error) {
 	num(&cfg.StatsPollSeconds, "STATS_POLL_SECONDS")
 	num(&cfg.OnlineWindowSeconds, "ONLINE_WINDOW_SECONDS")
 	str(&cfg.ListenAddr, "LISTEN_ADDR")
+	str(&cfg.TelegramBotToken, "TELEGRAM_BOT_TOKEN")
+	str(&cfg.TelegramAdminChatIDs, "TELEGRAM_ADMIN_CHAT_IDS")
+	str(&cfg.TelegramAPIURL, "TELEGRAM_API_URL")
 
 	if len([]rune(cfg.JWTSecret)) < 16 {
 		errs = append(errs, "JWT_SECRET: минимум 16 символов")
@@ -162,6 +171,9 @@ func Load(lookup Lookup) (*Config, error) {
 	case "local", "ssh", "dry_run":
 	default:
 		errs = append(errs, fmt.Sprintf("XRAY_MODE: допустимо local, ssh или dry_run, получено %q", cfg.XrayMode))
+	}
+	if _, err := cfg.TelegramAdminChats(); err != nil {
+		errs = append(errs, err.Error())
 	}
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("некорректная конфигурация: %s", strings.Join(errs, "; "))
@@ -239,6 +251,19 @@ func (c *Config) TrustedProxyList() map[string]struct{} {
 		set[item] = struct{}{}
 	}
 	return set
+}
+
+// TelegramAdminChats — чаты Telegram, которым бот шлёт заявки и чьи нажатия принимает.
+func (c *Config) TelegramAdminChats() ([]int64, error) {
+	var chats []int64
+	for _, item := range splitList(c.TelegramAdminChatIDs) {
+		id, err := strconv.ParseInt(item, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("TELEGRAM_ADMIN_CHAT_IDS: ожидаются числа через запятую, получено %q", item)
+		}
+		chats = append(chats, id)
+	}
+	return chats, nil
 }
 
 // EffectiveXrayMode учитывает устаревший флаг XRAY_DRY_RUN.

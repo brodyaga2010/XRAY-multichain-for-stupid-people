@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"xraypanel/internal/auth"
+	"xraypanel/internal/ratelimit"
 	"xraypanel/internal/store"
 )
 
@@ -52,6 +53,7 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) error {
 		}
 		return err
 	}
+	a.notifyRegistered(*user, ratelimit.ClientIP(r, a.trusted))
 	writeJSON(w, http.StatusCreated, authSession{User: toUserOut(user)})
 	return nil
 }

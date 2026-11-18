@@ -103,7 +103,7 @@ func (a *App) revokeKey(ctx context.Context, key *store.VpnKey, actor *store.Use
 }
 
 // suspendUser отключает активные ключи в Xray и помечает пользователя заблокированным.
-func (a *App) suspendUser(ctx context.Context, admin, user *store.User) (*store.User, error) {
+func (a *App) suspendUser(ctx context.Context, admin, user *store.User, extra map[string]any) (*store.User, error) {
 	keys, err := a.st.KeysByOwnerStatus(ctx, user.ID, store.KeyActive)
 	if err != nil {
 		return nil, err
@@ -113,11 +113,11 @@ func (a *App) suspendUser(ctx context.Context, admin, user *store.User) (*store.
 			return nil, err
 		}
 	}
-	return a.setUserStatus(ctx, admin, user, store.UserSuspended, "user.suspend", "keys_disabled", keys, store.KeySuspended)
+	return a.setUserStatus(ctx, admin, user, store.UserSuspended, "user.suspend", "keys_disabled", keys, store.KeySuspended, extra)
 }
 
 // activateUser возвращает в Xray ключи, отключённые блокировкой, и подтверждает пользователя.
-func (a *App) activateUser(ctx context.Context, admin, user *store.User, action string) (*store.User, error) {
+func (a *App) activateUser(ctx context.Context, admin, user *store.User, action string, extra map[string]any) (*store.User, error) {
 	keys, err := a.st.KeysByOwnerStatus(ctx, user.ID, store.KeySuspended)
 	if err != nil {
 		return nil, err
@@ -127,11 +127,15 @@ func (a *App) activateUser(ctx context.Context, admin, user *store.User, action 
 			return nil, err
 		}
 	}
-	return a.setUserStatus(ctx, admin, user, store.UserApproved, action, "keys_restored", keys, store.KeyActive)
+	return a.setUserStatus(ctx, admin, user, store.UserApproved, action, "keys_restored", keys, store.KeyActive, extra)
 }
 
 func (a *App) setUserStatus(ctx context.Context, admin, user *store.User, userStatus, action, counter string,
-	keys []store.VpnKey, keyStatus string) (*store.User, error) {
+	keys []store.VpnKey, keyStatus string, extra map[string]any) (*store.User, error) {
+	meta := map[string]any{counter: len(keys)}
+	for k, v := range extra {
+		meta[k] = v
+	}
 	err := a.st.Tx(ctx, func(q *store.Queries) error {
 		for _, key := range keys {
 			if err := q.SetKeyStatus(ctx, key.ID, keyStatus); err != nil {
@@ -143,7 +147,7 @@ func (a *App) setUserStatus(ctx context.Context, admin, user *store.User, userSt
 		}
 		return q.InsertAudit(ctx, store.Audit{
 			ActorID: &admin.ID, Action: action, TargetType: "user", TargetID: fmt.Sprint(user.ID),
-			Metadata: map[string]any{counter: len(keys)},
+			Metadata: meta,
 		})
 	})
 	if err != nil {

@@ -12,11 +12,13 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	_ "time/tzdata" // часовой пояс из TZ работает и без /usr/share/zoneinfo
 
 	"xraypanel/internal/api"
 	"xraypanel/internal/config"
 	"xraypanel/internal/stats"
 	"xraypanel/internal/store"
+	"xraypanel/internal/telegram"
 	"xraypanel/internal/web"
 	"xraypanel/internal/xray"
 )
@@ -200,6 +202,7 @@ func serve(ctx context.Context, cfg *config.Config) error {
 	} else {
 		close(statsDone)
 	}
+	botDone := startBot(statsCtx, cfg, app)
 
 	serverErr := make(chan error, 1)
 	go func() {
@@ -211,6 +214,7 @@ func serve(ctx context.Context, cfg *config.Config) error {
 	case err := <-serverErr:
 		cancelStats()
 		<-statsDone
+		<-botDone
 		return err
 	case <-ctx.Done():
 	}
@@ -220,5 +224,28 @@ func serve(ctx context.Context, cfg *config.Config) error {
 	err = server.Shutdown(shutdownCtx)
 	cancelStats()
 	<-statsDone
+	<-botDone
 	return err
+}
+
+// startBot запускает Telegram-бота, если задан TELEGRAM_BOT_TOKEN; канал закрывается после остановки.
+func startBot(ctx context.Context, cfg *config.Config, app *api.App) <-chan struct{} {
+	done := make(chan struct{})
+	if cfg.TelegramBotToken == "" {
+		close(done)
+		return done
+	}
+	chats, err := cfg.TelegramAdminChats() // формат уже проверен в config.Load
+	if err != nil {
+		slog.Error("telegram", "error", err)
+		close(done)
+		return done
+	}
+	bot := telegram.New(telegram.NewClient(cfg.TelegramAPIURL, cfg.TelegramBotToken), chats, app)
+	app.SetNotifier(bot)
+	go func() {
+		defer close(done)
+		bot.Run(ctx)
+	}()
+	return done
 }

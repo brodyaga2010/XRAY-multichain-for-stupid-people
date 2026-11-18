@@ -44,6 +44,12 @@ func (q *Queries) UserBySubToken(ctx context.Context, token string) (*User, erro
 	return scanUser(q.db.QueryRowContext(ctx, "SELECT "+userCols+" FROM users WHERE sub_token = ?", token))
 }
 
+// FirstAdmin — администратор с наименьшим id (от его имени пишутся действия из Telegram).
+func (q *Queries) FirstAdmin(ctx context.Context) (*User, error) {
+	return scanUser(q.db.QueryRowContext(ctx,
+		"SELECT "+userCols+" FROM users WHERE role = ? ORDER BY id LIMIT 1", RoleAdmin))
+}
+
 // ListUsers — новые первыми (created_at DESC, id DESC).
 func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 	rows, err := q.db.QueryContext(ctx, "SELECT "+userCols+" FROM users ORDER BY created_at DESC, id DESC")

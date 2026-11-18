@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -23,7 +24,7 @@ func TestDefaultsMatchPythonSettings(t *testing.T) {
 		XrayConfigPath: "/usr/local/etc/xray/config.json", XrayBackupDir: "/var/lib/xray-panel/backups", XrayBackupKeep: 30,
 		XrayLockPath: "/run/xray-panel/config.lock", XrayBinary: "xray", XrayAPIServer: "127.0.0.1:10085",
 		XrayRestartCommand: "systemctl restart xray", XrayXHTTPPort: 2053, XrayPublicHost: "127.0.0.1",
-		StatsPollSeconds: 60, OnlineWindowSeconds: 180, ListenAddr: "127.0.0.1:8000",
+		StatsPollSeconds: 60, OnlineWindowSeconds: 180, ListenAddr: "127.0.0.1:8000", TelegramAPIURL: "https://api.telegram.org",
 	}
 	if *cfg != want {
 		t.Errorf("настройки по умолчанию:\n got %+v\nwant %+v", *cfg, want)
@@ -141,5 +142,39 @@ func TestListsAreTrimmed(t *testing.T) {
 	proxies := cfg.TrustedProxyList()
 	if _, ok := proxies["::1"]; !ok || len(proxies) != 2 {
 		t.Errorf("прокси: %v", proxies)
+	}
+}
+
+func TestTelegramAdminChats(t *testing.T) {
+	tests := []struct {
+		raw     string
+		want    []int64
+		wantErr bool
+	}{
+		{"", nil, false},
+		{"432739846", []int64{432739846}, false},
+		{" 1, -100200300 ,", []int64{1, -100200300}, false},
+		{"me", nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.raw, func(t *testing.T) {
+			_, err := Load(func(key string) (string, bool) {
+				switch key {
+				case "JWT_SECRET":
+					return "long-enough-secret-value", true
+				case "TELEGRAM_ADMIN_CHAT_IDS":
+					return tt.raw, true
+				}
+				return "", false
+			})
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("Load err = %v, wantErr %v", err, tt.wantErr)
+			}
+			cfg := Config{TelegramAdminChatIDs: tt.raw}
+			got, _ := cfg.TelegramAdminChats()
+			if fmt.Sprint(got) != fmt.Sprint(tt.want) {
+				t.Errorf("chats = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

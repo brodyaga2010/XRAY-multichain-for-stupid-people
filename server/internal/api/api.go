@@ -38,6 +38,7 @@ type App struct {
 	origins   map[string]struct{}
 	anyOrigin bool
 	log       *slog.Logger
+	notifier  RegistrationNotifier
 }
 
 // New создаёт приложение.
