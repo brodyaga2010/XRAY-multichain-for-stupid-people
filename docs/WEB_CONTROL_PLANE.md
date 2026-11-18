@@ -52,8 +52,8 @@
 
 Если проверка конфига не прошла, ключ не сохраняется, а пользователь получает ошибку.
 
-Раз в минуту кабинет забирает статистику (`statsquery -reset`, `statsgetallonlineusers`): трафик
-накапливается в базе, ключ считается онлайн, если был активен за последние 3 минуты.
+Раз в 15 секунд кабинет забирает статистику (`statsquery -reset`, `statsgetallonlineusers`): трафик
+накапливается в базе, ключ считается онлайн, если был активен за последнюю минуту. Открытые страницы кабинета сами обновляют данные раз в 15 секунд и при возврате на вкладку.
 
 Команда `xray-panel bootstrap-xray` готовит конфиг relay: включает API и статистику, добавляет XHTTP
 inbound, приводит `email` клиентов к UUID. Ключи, созданные раньше скриптами, администратор подтягивает
@@ -164,7 +164,7 @@ make web-reset               # вернуть заглушку интерфей�
 | `XRAY_API_SERVER` | `127.0.0.1:10085` | API Xray |
 | `XRAY_RESTART_COMMAND` | `systemctl restart xray` | запасной вариант, если API недоступно |
 | `XRAY_XHTTP_PORT` | `2053` | порт XHTTP inbound |
-| `STATS_POLL_SECONDS`, `ONLINE_WINDOW_SECONDS` | `60`, `180` | сбор статистики и окно «онлайн» |
+| `STATS_POLL_SECONDS`, `ONLINE_WINDOW_SECONDS` | `15`, `60` | сбор статистики и окно «онлайн» |
 | `TELEGRAM_BOT_TOKEN` | — | токен бота от @BotFather; пусто — бот выключен |
 | `TELEGRAM_ADMIN_CHAT_IDS` | — | chat id администраторов через запятую |
 | `TELEGRAM_API_URL` | `https://api.telegram.org` | адрес Bot API (например, свой прокси) |

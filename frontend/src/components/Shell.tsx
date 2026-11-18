@@ -9,10 +9,11 @@ import {
   ShieldCheck,
   Users
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, User } from "../api";
 import { AppView } from "../types";
 import { SITE_NAME } from "../brand";
+import { pathForView, viewFromPath } from "../routes";
 import { AdminDashboard } from "../views/AdminDashboard";
 import { AdminUsers } from "../views/AdminUsers";
 import { AuditLog } from "../views/AuditLog";
@@ -32,7 +33,8 @@ const adminNav = [
 ];
 
 export function Shell({ user, onUserChange }: { user: User; onUserChange: (user: User | null) => void }) {
-  const [view, setView] = useState<AppView>(user.role === "admin" ? "dashboard" : "keys");
+  const isAdmin = user.role === "admin";
+  const [view, setView] = useState<AppView>(() => viewFromPath(window.location.pathname, isAdmin));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("sidebar-collapsed") === "true");
   const [error, setError] = useState("");
   const nav = useMemo(() => (user.role === "admin" ? adminNav : userNav), [user.role]);
@@ -42,7 +44,23 @@ export function Shell({ user, onUserChange }: { user: User; onUserChange: (user:
     onUserChange(null);
   }
 
+  // Адрес всегда соответствует разделу; «Назад»/«Вперёд» в браузере переключают разделы.
+  useEffect(() => {
+    const canonical = pathForView(view, isAdmin);
+    if (window.location.pathname !== canonical) {
+      window.history.replaceState(null, "", canonical + window.location.search + window.location.hash);
+    }
+    const onPopState = () => {
+      setView(viewFromPath(window.location.pathname, isAdmin));
+      setError("");
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [isAdmin]);
+
   function selectView(next: AppView) {
+    const path = pathForView(next, isAdmin);
+    if (window.location.pathname !== path) window.history.pushState(null, "", path);
     setView(next);
     setError("");
     window.scrollTo({ top: 0 });

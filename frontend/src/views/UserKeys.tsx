@@ -5,6 +5,7 @@ import { CreateKeyForm } from "../components/CreateKeyForm";
 import { KeyTable } from "../components/KeyTable";
 import { SearchBox } from "../components/SearchBox";
 import { SubscriptionPanel } from "../components/SubscriptionPanel";
+import { useAutoRefresh } from "../hooks";
 import { matchesSearch } from "../utils";
 
 const SEARCH_THRESHOLD = 5;
@@ -43,6 +44,8 @@ export function UserKeys({
   useEffect(() => {
     load().catch((err) => setError(err.message));
   }, [isAdmin]);
+
+  useAutoRefresh(load);
 
   async function createKey(name: string) {
     setError("");

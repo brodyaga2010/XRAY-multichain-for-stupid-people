@@ -83,8 +83,8 @@ func Defaults() Config {
 		XrayRestartCommand:      "systemctl restart xray",
 		XrayXHTTPPort:           2053,
 		XrayPublicHost:          "127.0.0.1",
-		StatsPollSeconds:        60,
-		OnlineWindowSeconds:     180,
+		StatsPollSeconds:        15,
+		OnlineWindowSeconds:     60,
 		ListenAddr:              "127.0.0.1:8000",
 		TelegramAPIURL:          "https://api.telegram.org",
 	}

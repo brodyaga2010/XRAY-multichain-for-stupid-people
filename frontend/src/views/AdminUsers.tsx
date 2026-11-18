@@ -6,7 +6,7 @@ import { FilterChips } from "../components/FilterChips";
 import { KeyTable } from "../components/KeyTable";
 import { SearchBox } from "../components/SearchBox";
 import { Status } from "../components/Status";
-import { useMediaQuery } from "../hooks";
+import { useAutoRefresh, useMediaQuery } from "../hooks";
 import { formatDate, matchesSearch } from "../utils";
 
 type UserFilter = "all" | UserStatus;
@@ -65,6 +65,8 @@ export function AdminUsers({
   useEffect(() => {
     if (selected) loadKeys(selected.id).catch((err) => setError(err.message));
   }, [selected?.id]);
+
+  useAutoRefresh(() => Promise.all([loadUsers(), selected ? loadKeys(selected.id) : null]));
 
   function select(user: User | null) {
     setSelected(user);

@@ -24,7 +24,7 @@ func TestDefaultsMatchPythonSettings(t *testing.T) {
 		XrayConfigPath: "/usr/local/etc/xray/config.json", XrayBackupDir: "/var/lib/xray-panel/backups", XrayBackupKeep: 30,
 		XrayLockPath: "/run/xray-panel/config.lock", XrayBinary: "xray", XrayAPIServer: "127.0.0.1:10085",
 		XrayRestartCommand: "systemctl restart xray", XrayXHTTPPort: 2053, XrayPublicHost: "127.0.0.1",
-		StatsPollSeconds: 60, OnlineWindowSeconds: 180, ListenAddr: "127.0.0.1:8000", TelegramAPIURL: "https://api.telegram.org",
+		StatsPollSeconds: 15, OnlineWindowSeconds: 60, ListenAddr: "127.0.0.1:8000", TelegramAPIURL: "https://api.telegram.org",
 	}
 	if *cfg != want {
 		t.Errorf("настройки по умолчанию:\n got %+v\nwant %+v", *cfg, want)

@@ -3,6 +3,7 @@ import { Activity, ArrowUpDown, Clock3, KeyRound, ShieldAlert, Users, Wifi } fro
 import { api, User, VpnKey } from "../api";
 import { StatCard } from "../components/StatCard";
 import { Status } from "../components/Status";
+import { useAutoRefresh } from "../hooks";
 import { AppView } from "../types";
 import { formatBytes, formatDate, keyTitle } from "../utils";
 
@@ -26,6 +27,8 @@ export function AdminDashboard({
   useEffect(() => {
     load().catch((err) => setError(err.message));
   }, []);
+
+  useAutoRefresh(load);
 
   async function approve(userId: number) {
     setApproving(userId);

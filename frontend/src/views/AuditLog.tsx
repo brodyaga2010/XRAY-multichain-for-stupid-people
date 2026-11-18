@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, AuditEntry, User, VpnKey } from "../api";
+import { useAutoRefresh } from "../hooks";
 import { formatDateTime, keyTitle } from "../utils";
 
 const actionLabels: Record<string, string> = {
@@ -29,6 +30,8 @@ export function AuditLog({ setError }: { setError: (error: string) => void }) {
     api.adminKeys().then(setKeys).catch(() => undefined);
     api.adminUsers().then(setUsers).catch(() => undefined);
   }, []);
+
+  useAutoRefresh(() => api.adminAudit(200).then(setEntries));
 
   const keyById = useMemo(() => new Map(keys.map((key) => [String(key.id), key])), [keys]);
   const userById = useMemo(() => new Map(users.map((user) => [String(user.id), user])), [users]);
