@@ -22,17 +22,21 @@ export function KeyTable({
   showOwner = false,
   onRevoke,
   title = "Ключи",
+  titleExtra,
   showCount = true,
   headerExtra,
   beforeList,
   empty,
   collapseRevoked = false,
-  autoOpenKeyId = null
+  autoOpenKeyId = null,
+  cardsOnly = false
 }: {
   keys: VpnKey[];
   showOwner?: boolean;
   onRevoke: (id: number) => void | Promise<void>;
   title?: string;
+  /** Подпись рядом с заголовком (например, «6 из 10»). */
+  titleExtra?: ReactNode;
   showCount?: boolean;
   /** Кнопки справа в шапке списка. */
   headerExtra?: ReactNode;
@@ -44,6 +48,8 @@ export function KeyTable({
   collapseRevoked?: boolean;
   /** Открыть модалку этого ключа (например, только что созданного). */
   autoOpenKeyId?: number | null;
+  /** Всегда карточки (сеткой на широком экране), без таблицы — для личного списка устройств. */
+  cardsOnly?: boolean;
 }) {
   const [filter, setFilter] = useState<KeyFilter>("all");
   const [showRevoked, setShowRevoked] = useState(false);
@@ -63,16 +69,20 @@ export function KeyTable({
   const filtered = baseKeys.filter((key) => filter === "all" || key.status === filter);
   const rendered = collapseRevoked && showRevoked && filter === "all" ? [...filtered, ...revokedKeys] : filtered;
   const openKey = keys.find((key) => key.id === openKeyId) ?? null;
-  const showChips = collapseRevoked ? baseKeys.length >= 4 : keys.length > 0;
+  // Пользователю фильтр нужен, только если в списке есть ключи с разными статусами.
+  const showChips = collapseRevoked ? new Set(baseKeys.map((key) => key.status)).size > 1 : keys.length > 0;
 
   function confirmRevoke(key: VpnKey) {
     if (window.confirm(`Отозвать ключ «${keyTitle(key)}»?`)) void onRevoke(key.id);
   }
 
   return (
-    <div className="table-panel key-table">
+    <div className={`table-panel key-table ${cardsOnly ? "cards-only" : ""}`}>
       <div className="panel-heading">
-        <h2>{title}</h2>
+        <h2>
+          {title}
+          {titleExtra}
+        </h2>
         <div className="panel-heading-side">
           {showCount && <span>активных: {activeCount}</span>}
           {headerExtra}
@@ -97,7 +107,7 @@ export function KeyTable({
                 <tr>
                   <th className="col-name">Ключ</th>
                   {showOwner && <th>Владелец</th>}
-                  <th>Статус</th>
+                  <th>Подключение</th>
                   <th>Трафик</th>
                   <th></th>
                 </tr>
@@ -111,7 +121,7 @@ export function KeyTable({
                           {keyTitle(key)}
                         </strong>
                         <span className="uuid">
-                          {shortUuid(key.uuid)} · {formatDate(key.created_at)}
+                          {showOwner ? `${shortUuid(key.uuid)} · ` : ""}с {formatDate(key.created_at)}
                         </span>
                       </div>
                     </td>
@@ -124,8 +134,7 @@ export function KeyTable({
                     )}
                     <td>
                       <div className="status-cell">
-                        <Status status={key.status} />
-                        {key.status !== "revoked" && <OnlineIndicator keyItem={key} />}
+                        {key.status === "active" ? <OnlineIndicator keyItem={key} /> : <Status status={key.status} />}
                       </div>
                     </td>
                     <td>
@@ -135,7 +144,7 @@ export function KeyTable({
                       {key.status !== "revoked" && (
                         <div className="row-actions">
                           {key.status === "active" && (
-                            <button className="small ghost" onClick={() => setOpenKeyId(key.id)}>
+                            <button className="connect-button compact" onClick={() => setOpenKeyId(key.id)}>
                               <Link2 size={15} /> Подключить
                             </button>
                           )}
@@ -169,19 +178,16 @@ export function KeyTable({
                       </span>
                     )}
                   </div>
-                  <Status status={key.status} />
+                  {key.status === "active" ? <OnlineIndicator keyItem={key} /> : <Status status={key.status} />}
                 </div>
-                <div className="key-card-meta">
-                  <OnlineIndicator keyItem={key} />
-                  <div className="key-card-line">
-                    <Traffic keyItem={key} />
-                    <span>{formatDate(key.created_at)}</span>
-                  </div>
+                <div className="key-card-line">
+                  <Traffic keyItem={key} />
+                  <span>с {formatDate(key.created_at)}</span>
                 </div>
                 {key.status !== "revoked" && (
                   <div className="key-card-actions">
                     {key.status === "active" ? (
-                      <button className="primary" onClick={() => setOpenKeyId(key.id)}>
+                      <button className="connect-button" onClick={() => setOpenKeyId(key.id)}>
                         <Link2 size={17} />
                         <span>Подключить</span>
                       </button>

@@ -10,7 +10,8 @@ import {
   Users
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { api, User } from "../api";
+import { api, User, VpnStatus } from "../api";
+import { useAutoRefresh } from "../hooks";
 import { AppView } from "../types";
 import { SITE_NAME } from "../brand";
 import { pathForView, viewFromPath } from "../routes";
@@ -19,6 +20,7 @@ import { AdminUsers } from "../views/AdminUsers";
 import { AuditLog } from "../views/AuditLog";
 import { Profile } from "../views/Profile";
 import { UserKeys } from "../views/UserKeys";
+import { VpnStatusPill } from "./VpnStatusPill";
 
 const userNav = [
   { id: "keys" as const, label: "Ключи", icon: KeyRound },
@@ -37,7 +39,15 @@ export function Shell({ user, onUserChange }: { user: User; onUserChange: (user:
   const [view, setView] = useState<AppView>(() => viewFromPath(window.location.pathname, isAdmin));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("sidebar-collapsed") === "true");
   const [error, setError] = useState("");
+  const [vpnStatus, setVpnStatus] = useState<VpnStatus | null>(null);
   const nav = useMemo(() => (user.role === "admin" ? adminNav : userNav), [user.role]);
+
+  // Статус VPN в шапке: ошибка загрузки просто прячет индикатор.
+  const loadStatus = () => api.vpnStatus().then(setVpnStatus, () => setVpnStatus(null));
+  useEffect(() => {
+    void loadStatus();
+  }, []);
+  useAutoRefresh(loadStatus);
 
   async function logout() {
     await api.logout().catch(() => undefined);
@@ -74,7 +84,7 @@ export function Shell({ user, onUserChange }: { user: User; onUserChange: (user:
   }
 
   return (
-    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${isAdmin ? "" : "user-mode"}`}>
       <aside className="sidebar">
         <div className="brand-row">
           <div className="brand-mark compact">
@@ -103,9 +113,8 @@ export function Shell({ user, onUserChange }: { user: User; onUserChange: (user:
       <main className="workspace">
         <header className="topbar">
           <h1>{titleFor(view)}</h1>
-          <span className={`status role-badge ${user.role === "admin" ? "approved" : "active"}`}>
-            {user.role === "admin" ? "Админ" : "Пользователь"}
-          </span>
+          {isAdmin && <span className="status role-badge approved">Админ</span>}
+          <VpnStatusPill status={vpnStatus} onDetails={isAdmin ? () => selectView("dashboard") : undefined} />
           <div className="account">
             <div className="account-meta">
               <span className="ellipsis" title={user.email}>

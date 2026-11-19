@@ -1922,7 +1922,10 @@ tbody tr:hover {
   position: sticky;
   right: 0;
   background: var(--surface);
-  box-shadow: -10px 0 12px -12px rgba(15, 23, 42, 0.25);
+  /* при border-collapse фон закреплённой ячейки перекрывает её нижнюю границу — рисуем линию тенью */
+  box-shadow:
+    inset 0 -1px 0 #ebeff5,
+    -10px 0 12px -12px rgba(15, 23, 42, 0.25);
 }
 
 .key-table tbody tr:hover td:last-child {
@@ -2146,101 +2149,371 @@ tbody tr:hover {
   }
 }
 
-/* ---------- Статус VPN для пользователя ---------- */
+/* ---------- Статус VPN в шапке ---------- */
 
-.vpn-status {
-  display: flex;
+.vpn-pill-wrap {
+  position: relative;
+  margin-left: auto;
+}
+
+.vpn-pill-wrap + .account {
+  margin-left: 0;
+}
+
+.vpn-pill {
+  display: inline-flex;
   align-items: center;
-  gap: 14px;
-  min-width: 0;
-  padding: 14px 16px;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 12px 0 10px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
   box-shadow: var(--shadow-sm);
 }
 
-.vpn-status.warn {
-  border-color: #f0dc9c;
-  background: var(--amber-soft);
-}
-
-.vpn-status.fail {
-  border-color: #f2c4bf;
-  background: var(--danger-soft);
-}
-
-.vpn-status-dot {
-  flex: 0 0 auto;
-  width: 12px;
-  height: 12px;
+.vpn-pill i,
+.vpn-popover strong i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 0 4px var(--accent-soft);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
-.vpn-status.warn .vpn-status-dot {
+.vpn-pill.warn {
+  border-color: #f0dc9c;
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.vpn-pill.fail {
+  border-color: #f2c4bf;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.vpn-pill.warn i,
+.vpn-popover.warn strong i {
   background: #d99a00;
-  box-shadow: 0 0 0 4px #fbe9b4;
+  box-shadow: 0 0 0 3px #fbe9b4;
 }
 
-.vpn-status.fail .vpn-status-dot {
+.vpn-pill.fail i,
+.vpn-popover.fail strong i {
   background: var(--danger);
-  box-shadow: 0 0 0 4px #f9d6d1;
+  box-shadow: 0 0 0 3px #f9d6d1;
 }
 
-.vpn-status > div {
+.vpn-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
   display: grid;
-  flex: 1;
-  gap: 2px;
-  min-width: 0;
+  gap: 8px;
+  width: min(280px, calc(100vw - 24px));
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  animation: popover-in 140ms ease-out;
 }
 
-.vpn-status strong {
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.vpn-popover strong {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   font-size: 15px;
 }
 
-.vpn-status > div > span {
+.vpn-popover p {
+  margin: 0;
   color: var(--text-soft);
   font-size: 13px;
+  line-height: 1.4;
 }
 
-.vpn-status dl {
+.vpn-popover dl {
   display: flex;
-  gap: 18px;
-  margin: 0;
+  gap: 20px;
+  margin: 2px 0 0;
 }
 
-.vpn-status dl div {
+.vpn-popover dl div {
   display: grid;
   gap: 1px;
-  text-align: right;
 }
 
-.vpn-status dt {
+.vpn-popover dt {
   color: var(--muted);
   font-size: 11px;
   font-weight: 700;
 }
 
-.vpn-status dd {
+.vpn-popover dd {
   margin: 0;
   font-size: 15px;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
+}
+
+.vpn-popover .link-button {
+  min-height: 28px;
+  font-size: 13px;
+}
+
+/* ---------- Список ключей: шапка, поиск, фильтры, карточки ---------- */
+
+.title-count {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 14px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 640px) {
-  .vpn-status {
-    flex-wrap: wrap;
+.key-table .panel-heading {
+  flex-wrap: nowrap;
+}
+
+.add-device {
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px 0 10px;
+  font-size: 13px;
+}
+
+.add-device.open {
+  background: var(--surface-alt);
+  color: var(--text-soft);
+}
+
+.search-box input {
+  height: 40px;
+  padding-left: 38px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-alt);
+}
+
+.search-box svg {
+  left: 12px;
+}
+
+.search-box input:focus {
+  border-color: rgba(20, 150, 108, 0.6);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px rgba(20, 150, 108, 0.12);
+}
+
+.chips {
+  padding: 3px;
+  border-radius: 10px;
+}
+
+.chip {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.key-card {
+  gap: 8px;
+  padding: 14px 14px 12px;
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.key-card-head {
+  align-items: center;
+}
+
+.key-card-head .online-indicator {
+  flex: 0 0 auto;
+}
+
+.key-card-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 14px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.traffic {
+  display: inline-flex;
+  gap: 10px;
+}
+
+.key-card-actions {
+  margin-top: 4px;
+}
+
+.connect-button {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid #cfe9dd;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 760;
+  transition: background-color 160ms ease;
+}
+
+.connect-button:active {
+  background: #d7f0e5;
+}
+
+@media (hover: hover) {
+  .connect-button:hover {
+    background: #def3ea;
+  }
+}
+
+.key-card-actions .icon-button {
+  width: 40px;
+  height: 40px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.key-card-actions .icon-button.danger:hover,
+.key-card-actions .icon-button.danger:active {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+@media (max-width: 900px) {
+  .vpn-pill {
+    min-height: 32px;
   }
 
-  .vpn-status dl {
-    width: 100%;
-    padding-left: 26px;
+  .chip,
+  .add-device {
+    min-height: 34px;
   }
 
-  .vpn-status dl div {
-    text-align: left;
+  .search-box input {
+    min-height: 42px;
+  }
+
+  .key-card-actions .icon-button,
+  .connect-button {
+    min-height: 42px;
+    height: 42px;
+  }
+}
+
+/* ---------- Ключи: таблица админа и личные устройства на ПК ---------- */
+
+.connect-button.compact {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.key-table .row-actions .icon-button {
+  width: 34px;
+  height: 34px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.key-table .row-actions .icon-button.danger:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.key-table tbody tr:hover td {
+  background: #f8fbfa;
+}
+
+.key-table.cards-only .responsive-table {
+  display: none;
+}
+
+.key-table.cards-only .key-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+@media (hover: hover) {
+  .key-table.cards-only .key-card {
+    transition:
+      border-color 160ms ease,
+      box-shadow 160ms ease;
+  }
+
+  .key-table.cards-only .key-card:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-sm);
+  }
+}
+
+/* Пользователь: устройства слева, подписка справа; контент не растягивается на огромных экранах */
+.user-mode .topbar,
+.user-mode .workspace > .banner,
+.user-mode .view-frame {
+  max-width: 1240px;
+}
+
+.user-keys-layout {
+  display: grid;
+  gap: 18px;
+  align-items: start;
+}
+
+.user-keys-layout > * {
+  min-width: 0;
+}
+
+@media (min-width: 1200px) {
+  .user-keys-layout {
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+
+  .user-keys-layout .subscription-panel {
+    position: sticky;
+    top: 20px;
+  }
+
+  .user-keys-layout .subscription-panel .link-buttons > * {
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 900px) {
+  .user-keys-layout {
+    gap: 12px;
+  }
+
+  .key-table.cards-only .key-cards {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

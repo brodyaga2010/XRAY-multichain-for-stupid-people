@@ -18,8 +18,9 @@ export function OnlineIndicator({ keyItem }: { keyItem: VpnKey }) {
 
 export function Traffic({ keyItem }: { keyItem: VpnKey }) {
   return (
-    <span className="traffic">
-      ↑ {formatBytes(keyItem.traffic_up)} / ↓ {formatBytes(keyItem.traffic_down)}
+    <span className="traffic" title="Скачано / отправлено">
+      <span>↓ {formatBytes(keyItem.traffic_down)}</span>
+      <span>↑ {formatBytes(keyItem.traffic_up)}</span>
     </span>
   );
 }
