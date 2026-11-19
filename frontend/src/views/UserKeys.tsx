@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Plus } from "lucide-react";
-import { api, User, VpnKey } from "../api";
+import { api, User, VpnKey, VpnStatus } from "../api";
 import { CreateKeyForm } from "../components/CreateKeyForm";
 import { KeyTable } from "../components/KeyTable";
 import { SearchBox } from "../components/SearchBox";
 import { SubscriptionPanel } from "../components/SubscriptionPanel";
+import { VpnStatusBar } from "../components/VpnStatusBar";
 import { useAutoRefresh } from "../hooks";
 import { matchesSearch } from "../utils";
 
@@ -26,6 +27,7 @@ export function UserKeys({
   const [importResult, setImportResult] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [newKeyId, setNewKeyId] = useState<number | null>(null);
+  const [vpnStatus, setVpnStatus] = useState<VpnStatus | null>(null);
 
   const activeCount = useMemo(() => keys.filter((key) => key.status === "active").length, [keys]);
   const limitReached = activeCount >= user.key_limit;
@@ -36,9 +38,12 @@ export function UserKeys({
   );
 
   async function load() {
+    // Статус VPN — дополнение: его ошибка не должна мешать работе с ключами.
+    const status = isAdmin ? Promise.resolve() : api.vpnStatus().then(setVpnStatus, () => setVpnStatus(null));
     const result = isAdmin ? await api.adminKeys() : await api.keys();
     setKeys(result);
     setLoaded(true);
+    await status;
   }
 
   useEffect(() => {
@@ -119,6 +124,7 @@ export function UserKeys({
 
   return (
     <div className="stack">
+      <VpnStatusBar status={vpnStatus} />
       <KeyTable
         keys={filteredKeys}
         title="Мои устройства"

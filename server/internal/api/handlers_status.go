@@ -87,3 +87,23 @@ func (a *App) adminStatus(w http.ResponseWriter, r *http.Request) error {
 	writeJSON(w, http.StatusOK, out)
 	return nil
 }
+
+type publicStatusOut struct {
+	Status    string    `json:"status"`
+	LatencyMs *float64  `json:"latency_ms"`
+	CheckedAt *jsonTime `json:"checked_at"`
+}
+
+// userStatus — состояние VPN для пользователей: итог и задержка, без подробностей о серверах.
+func (a *App) userStatus(w http.ResponseWriter, r *http.Request) error {
+	if _, err := a.approvedUser(r); err != nil {
+		return err
+	}
+	out := publicStatusOut{Status: string(monitor.StatusUnknown)}
+	if a.status != nil {
+		p := a.status.Snapshot().Public()
+		out.Status, out.LatencyMs, out.CheckedAt = string(p.Status), p.Ms, nonZero(jsonTime{p.CheckedAt})
+	}
+	writeJSON(w, http.StatusOK, out)
+	return nil
+}

@@ -17,8 +17,9 @@ import (
 	"time"
 )
 
-// fakeSOCKS — SOCKS5-прокси для тестов; hang=true — принимает CONNECT, но не пересылает данные.
-func fakeSOCKS(t *testing.T, hang bool) string {
+// fakeSOCKS — SOCKS5-прокси для тестов; mode "hang" — принимает CONNECT, но не пересылает данные,
+// "close" — закрывает соединение сразу после CONNECT (как Xray, когда выход недоступен).
+func fakeSOCKS(t *testing.T, mode string) string {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -31,13 +32,13 @@ func fakeSOCKS(t *testing.T, hang bool) string {
 			if err != nil {
 				return
 			}
-			go serveSOCKS(conn, hang)
+			go serveSOCKS(conn, mode)
 		}
 	}()
 	return ln.Addr().String()
 }
 
-func serveSOCKS(conn net.Conn, hang bool) {
+func serveSOCKS(conn net.Conn, mode string) {
 	defer conn.Close()
 	buf := make([]byte, 262)
 	if _, err := io.ReadFull(conn, buf[:3]); err != nil {
@@ -53,8 +54,11 @@ func serveSOCKS(conn net.Conn, hang bool) {
 	io.ReadFull(conn, portBuf)
 	target := net.JoinHostPort(string(host), strconv.Itoa(int(binary.BigEndian.Uint16(portBuf))))
 	conn.Write([]byte{5, 0, 0, 1, 0, 0, 0, 0, 0, 0})
-	if hang {
+	switch mode {
+	case "hang":
 		time.Sleep(5 * time.Second)
+		return
+	case "close":
 		return
 	}
 	upstream, err := net.Dial("tcp", target)
@@ -96,11 +100,12 @@ func TestChainCheck(t *testing.T) {
 		wantDetail string
 		wantMs     bool
 	}{
-		{"цепочка работает", fakeSOCKS(t, false), "/generate_204", 3 * time.Second, 5 * time.Second, StatusOK, "", true},
-		{"медленно — деградация", fakeSOCKS(t, false), "/generate_204", time.Nanosecond, 5 * time.Second, StatusWarn, "очень медленно", true},
+		{"цепочка работает", fakeSOCKS(t, ""), "/generate_204", 3 * time.Second, 5 * time.Second, StatusOK, "", true},
+		{"медленно — деградация", fakeSOCKS(t, ""), "/generate_204", time.Nanosecond, 5 * time.Second, StatusWarn, "очень медленно", true},
 		{"служебный вход закрыт", closedAddr(t), "/generate_204", 0, 5 * time.Second, StatusFail, "служебный вход Xray", false},
-		{"трафик не проходит", fakeSOCKS(t, true), "/generate_204", 0, 300 * time.Millisecond, StatusFail, "нет ответа", false},
-		{"сайт ответил 502", fakeSOCKS(t, false), "/broken", 0, 5 * time.Second, StatusFail, "502", true},
+		{"трафик не проходит", fakeSOCKS(t, "hang"), "/generate_204", 0, 300 * time.Millisecond, StatusFail, "нет ответа", false},
+		{"сайт ответил 502", fakeSOCKS(t, ""), "/broken", 0, 5 * time.Second, StatusFail, "502", true},
+		{"выход оборвал соединение", fakeSOCKS(t, "close"), "/generate_204", 0, 5 * time.Second, StatusFail, "соединение оборвалось", false},
 		{"выключено", "", "/", 0, time.Second, StatusUnknown, "", false},
 	}
 	for _, tt := range tests {

@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -108,6 +109,9 @@ func chainError(ctx context.Context, err error) string {
 		return errProbeUnavailable.Error()
 	case ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded):
 		return "нет ответа — трафик не проходит через цепочку"
+	case errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF):
+		// Xray закрывает соединение, если выходной сервер недоступен или не смог достучаться до сайта.
+		return "соединение оборвалось — трафик не проходит через цепочку"
 	}
 	msg := err.Error()
 	if i := strings.LastIndex(msg, ": "); i >= 0 { // url.Error: «Get "https://…": причина»

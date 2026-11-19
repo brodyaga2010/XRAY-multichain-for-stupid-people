@@ -2145,3 +2145,102 @@ tbody tr:hover {
     gap: 12px;
   }
 }
+
+/* ---------- Статус VPN для пользователя ---------- */
+
+.vpn-status {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.vpn-status.warn {
+  border-color: #f0dc9c;
+  background: var(--amber-soft);
+}
+
+.vpn-status.fail {
+  border-color: #f2c4bf;
+  background: var(--danger-soft);
+}
+
+.vpn-status-dot {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.vpn-status.warn .vpn-status-dot {
+  background: #d99a00;
+  box-shadow: 0 0 0 4px #fbe9b4;
+}
+
+.vpn-status.fail .vpn-status-dot {
+  background: var(--danger);
+  box-shadow: 0 0 0 4px #f9d6d1;
+}
+
+.vpn-status > div {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vpn-status strong {
+  font-size: 15px;
+}
+
+.vpn-status > div > span {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.vpn-status dl {
+  display: flex;
+  gap: 18px;
+  margin: 0;
+}
+
+.vpn-status dl div {
+  display: grid;
+  gap: 1px;
+  text-align: right;
+}
+
+.vpn-status dt {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.vpn-status dd {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .vpn-status {
+    flex-wrap: wrap;
+  }
+
+  .vpn-status dl {
+    width: 100%;
+    padding-left: 26px;
+  }
+
+  .vpn-status dl div {
+    text-align: left;
+  }
+}

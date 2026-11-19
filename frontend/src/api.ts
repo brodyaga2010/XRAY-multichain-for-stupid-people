@@ -77,6 +77,13 @@ export interface MonitorIncident {
   ended_at: string | null;
 }
 
+/** Состояние VPN для пользователей: только итог и задержка. */
+export interface VpnStatus {
+  status: CheckStatus;
+  latency_ms: number | null;
+  checked_at: string | null;
+}
+
 export interface MonitorStatus {
   enabled: boolean;
   interval_seconds: number;
@@ -118,6 +125,7 @@ export const api = {
     }),
   logout: () => request<{ message: string }>("/auth/logout", { method: "POST" }),
   keys: () => request<VpnKey[]>("/keys"),
+  vpnStatus: () => request<VpnStatus>("/status"),
   createKey: (name: string) =>
     request<VpnKey>("/keys", { method: "POST", body: JSON.stringify({ name }) }),
   revokeKey: (id: number) => request<{ message: string }>(`/keys/${id}`, { method: "DELETE" }),

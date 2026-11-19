@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -68,6 +69,50 @@ func TestAdminStatus(t *testing.T) {
 			}
 			if tt.check != nil {
 				tt.check(t, resp.JSON())
+			}
+		})
+	}
+}
+
+func TestUserStatus(t *testing.T) {
+	at := time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)
+	ms := 190.0
+	snap := monitor.Snapshot{Enabled: true, CheckedAt: at, Checks: []monitor.CheckState{
+		{ID: monitor.CheckChain, Result: monitor.Result{Status: monitor.StatusOK, Ms: &ms}},
+		{ID: monitor.CheckExit, Alerted: true, Result: monitor.Result{Status: monitor.StatusWarn, Detail: "потери до 212.43.155.144"}},
+		{ID: monitor.CheckSystem, Alerted: true, Result: monitor.Result{Status: monitor.StatusFail, Value: "диск 98%"}},
+	}}
+	tests := []struct {
+		name   string
+		source api.StatusSource
+		login  string
+		status int
+		want   string // подстрока ответа
+	}{
+		{"аноним", fakeStatus(snap), "", 401, "Не выполнен вход"},
+		{"пользователь видит итог и задержку", fakeStatus(snap), "user@example.com", 200, `"status":"warn","latency_ms":190`},
+		{"мониторинг выключен", nil, "user@example.com", 200, `"status":"unknown","latency_ms":null,"checked_at":null`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := newEnv(t)
+			e.makeUser("user@example.com")
+			if tt.source != nil {
+				e.app.SetStatusSource(tt.source)
+			}
+			if tt.login != "" {
+				e.login(tt.login)
+			}
+
+			resp := e.get("/status")
+
+			if resp.Status != tt.status || !strings.Contains(string(resp.Raw), tt.want) {
+				t.Fatalf("%d %s", resp.Status, resp.Raw)
+			}
+			for _, secret := range []string{"212.43", "диск", "потери", "value"} {
+				if strings.Contains(string(resp.Raw), secret) {
+					t.Errorf("пользователю попали подробности %q: %s", secret, resp.Raw)
+				}
 			}
 		})
 	}

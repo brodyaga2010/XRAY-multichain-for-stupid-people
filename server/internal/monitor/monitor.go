@@ -68,10 +68,11 @@ type CheckState struct {
 	Result    Result
 	CheckedAt time.Time
 	Since     time.Time // с какого момента держится текущий статус
-	bad       int       // плохих результатов подряд
-	badSince  time.Time
-	alerted   bool
-	lastRun   time.Time
+	// Alerted — сбой подтверждён: плохих результатов подряд набралось до порога и отправлена тревога.
+	Alerted  bool
+	bad      int // плохих результатов подряд
+	badSince time.Time
+	lastRun  time.Time
 }
 
 // Snapshot — состояние мониторинга для API и бота.
@@ -227,8 +228,8 @@ func (m *Monitor) apply(c Check, r Result, now time.Time) string {
 			st.badSince = now
 		}
 		st.bad++
-		if st.bad >= m.threshold && !st.alerted {
-			st.alerted = true
+		if st.bad >= m.threshold && !st.Alerted {
+			st.Alerted = true
 			m.incidents = append(m.incidents, Incident{CheckID: c.ID, Name: c.Name, Status: r.Status, Detail: r.Detail, Start: st.badSince})
 			if len(m.incidents) > maxIncidents {
 				m.incidents = m.incidents[len(m.incidents)-maxIncidents:]
@@ -241,8 +242,8 @@ func (m *Monitor) apply(c Check, r Result, now time.Time) string {
 		return "" // проверку не удалось выполнить по существу — счётчики и открытый сбой не трогаем
 	}
 
-	wasAlerted, since := st.alerted, st.badSince
-	st.bad, st.alerted = 0, false
+	wasAlerted, since := st.Alerted, st.badSince
+	st.bad, st.Alerted = 0, false
 	if !wasAlerted || r.Status != StatusOK {
 		return ""
 	}

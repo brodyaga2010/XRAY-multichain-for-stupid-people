@@ -96,6 +96,7 @@ func (a *App) Handler() http.Handler {
 	api("GET /keys/subscription", a.getSubscription)
 	api("POST /keys/subscription/rotate", a.rotateSubscription)
 	api("DELETE /keys/{key_id}", a.revokeOwnKey)
+	api("GET /status", a.userStatus)
 
 	api("GET /admin/users", a.adminListUsers)
 	api("GET /admin/users/{user_id}/keys", a.adminListUserKeys)
