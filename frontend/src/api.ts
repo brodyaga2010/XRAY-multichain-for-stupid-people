@@ -50,6 +50,42 @@ export interface AuditEntry {
   created_at: string;
 }
 
+export type CheckStatus = "ok" | "warn" | "fail" | "unknown";
+
+export interface MonitorCheck {
+  id: string;
+  name: string;
+  status: CheckStatus;
+  value: string;
+  detail: string;
+  since: string | null;
+  checked_at: string | null;
+}
+
+export interface MonitorPoint {
+  at: string;
+  ms: number | null;
+  status: CheckStatus;
+}
+
+export interface MonitorIncident {
+  check: string;
+  name: string;
+  status: CheckStatus;
+  detail: string;
+  started_at: string;
+  ended_at: string | null;
+}
+
+export interface MonitorStatus {
+  enabled: boolean;
+  interval_seconds: number;
+  checked_at: string | null;
+  checks: MonitorCheck[];
+  history: MonitorPoint[];
+  incidents: MonitorIncident[];
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -87,6 +123,7 @@ export const api = {
   revokeKey: (id: number) => request<{ message: string }>(`/keys/${id}`, { method: "DELETE" }),
   adminUsers: () => request<User[]>("/admin/users"),
   adminKeys: () => request<VpnKey[]>("/admin/keys"),
+  adminStatus: () => request<MonitorStatus>("/admin/status"),
   adminUserKeys: (userId: number) => request<VpnKey[]>(`/admin/users/${userId}/keys`),
   approveUser: (userId: number) => request<User>(`/admin/users/${userId}/approve`, { method: "POST" }),
   suspendUser: (userId: number) => request<User>(`/admin/users/${userId}/suspend`, { method: "POST" }),

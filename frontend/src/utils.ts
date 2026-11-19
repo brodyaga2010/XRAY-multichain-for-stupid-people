@@ -53,3 +53,19 @@ export function matchesSearch(values: Array<string | number | null | undefined>,
 export async function copyText(text: string) {
   await navigator.clipboard.writeText(text);
 }
+
+/** «12:31» */
+export function formatTime(value: string | Date) {
+  const date = new Date(value);
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** «45 с» / «12 мин» / «2 ч 5 мин» — как в сообщениях бота. */
+export function formatDuration(ms: number) {
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  if (seconds < 60) return `${seconds} с`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} мин`;
+  const hours = Math.floor(minutes / 60);
+  return minutes % 60 ? `${hours} ч ${minutes % 60} мин` : `${hours} ч`;
+}

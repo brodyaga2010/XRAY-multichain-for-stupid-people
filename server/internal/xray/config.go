@@ -38,6 +38,7 @@ const (
 	DefaultGRPCService = "xray_grpc_service"
 	DefaultXHTTPPath   = "/download/updates"
 	ExitOutboundTag    = "to-exit"
+	ProbeInboundTag    = "panel-probe"
 	xhttpTag           = "user-inbound-xhttp"
 )
 
@@ -349,6 +350,15 @@ func EnsurePanelFeatures(cfg Config, apiListen string, xhttpPort int) (bool, err
 	for _, inbound := range UserInbounds(cfg) {
 		present = append(present, asStr(inbound["tag"]))
 	}
+	addToExitRule(cfg, present)
+
+	NormalizeClients(cfg)
+	return !reflect.DeepEqual(before, cfg), nil
+}
+
+// addToExitRule дописывает inbound-теги в правило маршрутизации «→ to-exit», если оно есть
+// (на одиночном сервере такого правила нет — трафик уходит в outbound по умолчанию).
+func addToExitRule(cfg Config, inboundTags []string) {
 	routing := setDefaultObj(cfg, "routing")
 	rules, ok := routing["rules"].([]any)
 	if !ok {
@@ -364,7 +374,7 @@ func EnsurePanelFeatures(cfg Config, apiListen string, xhttpPort int) (bool, err
 		if tags == nil {
 			tags = []any{}
 		}
-		for _, tag := range present {
+		for _, tag := range inboundTags {
 			found := false
 			for _, existing := range tags {
 				if asStr(existing) == tag {
@@ -377,11 +387,62 @@ func EnsurePanelFeatures(cfg Config, apiListen string, xhttpPort int) (bool, err
 			}
 		}
 		rule["inboundTag"] = tags
-		break
+		return
 	}
+}
 
-	NormalizeClients(cfg)
-	return !reflect.DeepEqual(before, cfg), nil
+// EnsureProbeInbound добавляет служебный SOCKS-вход на 127.0.0.1:port для проверки цепочки мониторингом.
+// Трафик через него маршрутизируется так же, как трафик пользователей. port <= 0 — ничего не делает.
+// Возвращает true, если конфиг изменился.
+func EnsureProbeInbound(cfg Config, port int) bool {
+	if port <= 0 {
+		return false
+	}
+	before := deepCopy(cfg)
+	want := map[string]any{
+		"tag":      ProbeInboundTag,
+		"listen":   "127.0.0.1",
+		"port":     port,
+		"protocol": "socks",
+		"settings": map[string]any{"auth": "noauth", "udp": false},
+	}
+	inbounds := asList(cfg["inbounds"])
+	replaced := false
+	for i, item := range inbounds {
+		inbound := asObj(item)
+		if inbound == nil || asStr(inbound["tag"]) != ProbeInboundTag {
+			continue
+		}
+		current, _ := toInt(inbound["port"])
+		if current != port || asStr(inbound["listen"]) != "127.0.0.1" || asStr(inbound["protocol"]) != "socks" {
+			inbounds[i] = want
+		}
+		replaced = true
+	}
+	if !replaced {
+		cfg["inbounds"] = append(inbounds, want)
+	}
+	addToExitRule(cfg, []string{ProbeInboundTag})
+	return !reflect.DeepEqual(before, cfg)
+}
+
+// ExitServer — адрес выходного сервера из outbound to-exit; ok=false, если цепочки нет.
+func ExitServer(cfg Config) (host string, port int, ok bool) {
+	for _, item := range asList(cfg["outbounds"]) {
+		outbound := asObj(item)
+		if outbound == nil || asStr(outbound["tag"]) != ExitOutboundTag {
+			continue
+		}
+		vnext := asList(asObj(outbound["settings"])["vnext"])
+		if len(vnext) == 0 {
+			return "", 0, false
+		}
+		server := asObj(vnext[0])
+		port, err := toInt(server["port"])
+		host = asStr(server["address"])
+		return host, port, err == nil && host != "" && port > 0
+	}
+	return "", 0, false
 }
 
 // BuildServerProfile извлекает из конфига параметры Reality и транспортов.

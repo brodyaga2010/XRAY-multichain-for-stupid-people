@@ -39,6 +39,7 @@ type App struct {
 	anyOrigin bool
 	log       *slog.Logger
 	notifier  RegistrationNotifier
+	status    StatusSource
 }
 
 // New создаёт приложение.
@@ -107,6 +108,7 @@ func (a *App) Handler() http.Handler {
 	api("POST /admin/users/{user_id}/keys", a.adminCreateKey)
 	api("DELETE /admin/keys/{key_id}", a.adminRevokeKey)
 	api("GET /admin/audit", a.adminAudit)
+	api("GET /admin/status", a.adminStatus)
 
 	mux.Handle("/api/", a.handle(func(http.ResponseWriter, *http.Request) error {
 		return httpErr(http.StatusNotFound, "Not Found")

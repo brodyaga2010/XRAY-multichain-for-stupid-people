@@ -25,10 +25,15 @@ const (
 
 	// PendingButton — постоянная кнопка администратора: список заявок, ждущих решения.
 	PendingButton = "📋 Активные заявки"
+	// StatusButton — постоянная кнопка администратора: сводка мониторинга.
+	StatusButton = "📊 Состояние"
 )
 
-// adminKeyboard — кнопка под полем ввода в чате администратора.
-var adminKeyboard = &ReplyKeyboard{Rows: [][]KeyboardButton{{{Text: PendingButton}}}, Resize: true, Persistent: true}
+// adminKeyboard — кнопки под полем ввода в чате администратора.
+var adminKeyboard = &ReplyKeyboard{
+	Rows:   [][]KeyboardButton{{{Text: PendingButton}, {Text: StatusButton}}},
+	Resize: true, Persistent: true,
+}
 
 // Bot присылает администраторам заявки на регистрацию и принимает нажатия «Подтвердить»/«Отклонить».
 // Работает через long polling: входящие порты и вебхуки не нужны.
@@ -37,6 +42,7 @@ type Bot struct {
 	admins map[int64]bool
 	chats  []int64
 	mod    Moderator
+	status StatusSource
 	log    *slog.Logger
 
 	// Location — часовой пояс времени в сообщениях (по умолчанию time.Local, задаётся TZ).
@@ -131,9 +137,14 @@ func (b *Bot) handleMessage(ctx context.Context, msg *Message) {
 	text := strings.TrimSpace(msg.Text)
 	command, _, _ := strings.Cut(text, " ")
 	command, _, _ = strings.Cut(command, "@") // /pending@botname в группах
+	if text == StatusButton || command == "/status" {
+		b.send(ctx, chat, b.statusText(), adminKeyboard)
+		return
+	}
 	if text != PendingButton && command != "/pending" {
-		b.send(ctx, chat, "Я пришлю сюда каждую новую регистрацию с кнопками «Подтвердить» и «Отклонить».\n\n"+
-			"Кнопка «"+PendingButton+"» внизу покажет все заявки, которые ждут решения.", adminKeyboard)
+		b.send(ctx, chat, "Я пришлю сюда каждую новую регистрацию с кнопками «Подтвердить» и «Отклонить», "+
+			"а также сообщу, если VPN начнёт работать плохо, и когда всё восстановится.\n\n"+
+			"«"+PendingButton+"» — заявки, которые ждут решения.\n«"+StatusButton+"» — как работает VPN сейчас.", adminKeyboard)
 		return
 	}
 	users, err := b.mod.PendingUsers(ctx)

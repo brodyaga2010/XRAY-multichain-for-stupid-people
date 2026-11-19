@@ -202,7 +202,7 @@ func TestHandleMessage(t *testing.T) {
 	pending := []store.User{{ID: 3, Email: "one@example.com"}, {ID: 4, Email: "two@example.com"}}
 	const (
 		noMarkup = ""
-		reply    = `"keyboard":[[{"text":"` + PendingButton + `"}]]`
+		reply    = `"keyboard":[[{"text":"` + PendingButton + `"},{"text":"` + StatusButton + `"}]]`
 		inline   = `"callback_data":"approve:`
 	)
 	type sent struct{ text, markup string }

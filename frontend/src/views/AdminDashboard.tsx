@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Activity, ArrowUpDown, Clock3, KeyRound, ShieldAlert, Users, Wifi } from "lucide-react";
-import { api, User, VpnKey } from "../api";
+import { api, MonitorStatus, User, VpnKey } from "../api";
+import { HealthPanel } from "../components/HealthPanel";
 import { StatCard } from "../components/StatCard";
 import { Status } from "../components/Status";
 import { useAutoRefresh } from "../hooks";
@@ -16,12 +17,16 @@ export function AdminDashboard({
 }) {
   const [users, setUsers] = useState<User[]>([]);
   const [keys, setKeys] = useState<VpnKey[]>([]);
+  const [health, setHealth] = useState<MonitorStatus | null>(null);
   const [approving, setApproving] = useState<number | null>(null);
 
   async function load() {
+    // Состояние грузится отдельно: его ошибка не должна прятать пользователей и ключи.
+    const status = api.adminStatus().then(setHealth, () => setHealth(null));
     const [loadedUsers, loadedKeys] = await Promise.all([api.adminUsers(), api.adminKeys()]);
     setUsers(loadedUsers);
     setKeys(loadedKeys);
+    await status;
   }
 
   useEffect(() => {
@@ -69,6 +74,8 @@ export function AdminDashboard({
         <StatCard label="Заблокированы" value={stats.suspendedUsers} helper="Доступ приостановлен" icon={ShieldAlert} tone="danger" />
         <StatCard label="Лимит ключей" value={stats.totalCapacity} helper="Сумма лимитов" icon={Users} />
       </div>
+
+      <HealthPanel status={health} />
 
       <section className="table-panel animate-in">
         <div className="panel-heading">

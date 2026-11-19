@@ -44,6 +44,7 @@ type Config struct {
 	XrayRestartCommand  string
 	XrayXHTTPPort       int
 	XrayPublicHost      string
+	XrayProbePort       int
 	StatsPollSeconds    int
 	OnlineWindowSeconds int
 
@@ -53,6 +54,13 @@ type Config struct {
 	TelegramBotToken     string
 	TelegramAdminChatIDs string
 	TelegramAPIURL       string
+
+	// Мониторинг цепочки и сервера; MonitorIntervalSeconds = 0 — выключен.
+	MonitorIntervalSeconds int
+	MonitorFailThreshold   int
+	MonitorProbeURL        string
+	MonitorChainSlowMs     int
+	MonitorExitSlowMs      int
 }
 
 // DefaultJWTSecret — значение по умолчанию, пригодное только для разработки.
@@ -83,10 +91,16 @@ func Defaults() Config {
 		XrayRestartCommand:      "systemctl restart xray",
 		XrayXHTTPPort:           2053,
 		XrayPublicHost:          "127.0.0.1",
+		XrayProbePort:           10811,
 		StatsPollSeconds:        15,
 		OnlineWindowSeconds:     60,
 		ListenAddr:              "127.0.0.1:8000",
 		TelegramAPIURL:          "https://api.telegram.org",
+		MonitorIntervalSeconds:  60,
+		MonitorFailThreshold:    3,
+		MonitorProbeURL:         "https://www.google.com/generate_204",
+		MonitorChainSlowMs:      3000,
+		MonitorExitSlowMs:       300,
 	}
 }
 
@@ -157,12 +171,18 @@ func Load(lookup Lookup) (*Config, error) {
 	str(&cfg.XrayRestartCommand, "XRAY_RESTART_COMMAND")
 	num(&cfg.XrayXHTTPPort, "XRAY_XHTTP_PORT")
 	str(&cfg.XrayPublicHost, "XRAY_PUBLIC_HOST")
+	num(&cfg.XrayProbePort, "XRAY_PROBE_PORT")
 	num(&cfg.StatsPollSeconds, "STATS_POLL_SECONDS")
 	num(&cfg.OnlineWindowSeconds, "ONLINE_WINDOW_SECONDS")
 	str(&cfg.ListenAddr, "LISTEN_ADDR")
 	str(&cfg.TelegramBotToken, "TELEGRAM_BOT_TOKEN")
 	str(&cfg.TelegramAdminChatIDs, "TELEGRAM_ADMIN_CHAT_IDS")
 	str(&cfg.TelegramAPIURL, "TELEGRAM_API_URL")
+	num(&cfg.MonitorIntervalSeconds, "MONITOR_INTERVAL_SECONDS")
+	num(&cfg.MonitorFailThreshold, "MONITOR_FAIL_THRESHOLD")
+	str(&cfg.MonitorProbeURL, "MONITOR_PROBE_URL")
+	num(&cfg.MonitorChainSlowMs, "MONITOR_CHAIN_SLOW_MS")
+	num(&cfg.MonitorExitSlowMs, "MONITOR_EXIT_SLOW_MS")
 
 	if len([]rune(cfg.JWTSecret)) < 16 {
 		errs = append(errs, "JWT_SECRET: минимум 16 символов")

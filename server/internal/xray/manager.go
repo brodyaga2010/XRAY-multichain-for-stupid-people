@@ -194,6 +194,9 @@ func (m *Manager) Bootstrap() (bool, error) {
 	if err != nil {
 		return false, badGateway("%s", err)
 	}
+	if EnsureProbeInbound(cfg, m.cfg.XrayProbePort) {
+		changed = true
+	}
 	if changed {
 		if err := m.saveConfig(cfg); err != nil {
 			return false, err
@@ -203,6 +206,16 @@ func (m *Manager) Bootstrap() (bool, error) {
 		}
 	}
 	return changed, nil
+}
+
+// ExitServer — адрес выходного сервера из текущего конфига; ok=false, если цепочки нет.
+func (m *Manager) ExitServer() (host string, port int, ok bool, err error) {
+	cfg, err := m.readConfig()
+	if err != nil {
+		return "", 0, false, err
+	}
+	host, port, ok = ExitServer(cfg)
+	return host, port, ok, nil
 }
 
 // ---------- ссылки ----------
@@ -521,5 +534,6 @@ func DryRunConfig() Config {
 		}},
 	}
 	_, _ = EnsurePanelFeatures(cfg, "127.0.0.1:10085", 2053)
+	EnsureProbeInbound(cfg, 10811) // порт по умолчанию XRAY_PROBE_PORT
 	return cfg
 }

@@ -40,10 +40,10 @@ func legacyRelayConfig(t *testing.T) Config {
 }
 
 // clientsByTag — клиенты каждого inbound в виде простых структур для сравнения.
+// clientsByTag — клиенты пользовательских inbound (служебный вход мониторинга не входит).
 func clientsByTag(cfg Config) map[string][]map[string]any {
 	out := map[string][]map[string]any{}
-	for _, item := range asList(cfg["inbounds"]) {
-		inbound := asObj(item)
+	for _, inbound := range UserInbounds(cfg) {
 		var clients []map[string]any
 		for _, c := range asList(asObj(inbound["settings"])["clients"]) {
 			clients = append(clients, asObj(c))

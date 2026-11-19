@@ -6,9 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -16,6 +20,7 @@ import (
 
 	"xraypanel/internal/api"
 	"xraypanel/internal/config"
+	"xraypanel/internal/monitor"
 	"xraypanel/internal/stats"
 	"xraypanel/internal/store"
 	"xraypanel/internal/telegram"
@@ -202,7 +207,18 @@ func serve(ctx context.Context, cfg *config.Config) error {
 	} else {
 		close(statsDone)
 	}
-	botDone := startBot(statsCtx, cfg, app)
+	mon := newMonitor(cfg, manager)
+	monitorDone := make(chan struct{})
+	if mon != nil {
+		app.SetStatusSource(mon)
+		go func() {
+			defer close(monitorDone)
+			mon.Run(statsCtx)
+		}()
+	} else {
+		close(monitorDone)
+	}
+	botDone := startBot(statsCtx, cfg, app, mon)
 
 	serverErr := make(chan error, 1)
 	go func() {
@@ -214,6 +230,7 @@ func serve(ctx context.Context, cfg *config.Config) error {
 	case err := <-serverErr:
 		cancelStats()
 		<-statsDone
+		<-monitorDone
 		<-botDone
 		return err
 	case <-ctx.Done():
@@ -224,12 +241,71 @@ func serve(ctx context.Context, cfg *config.Config) error {
 	err = server.Shutdown(shutdownCtx)
 	cancelStats()
 	<-statsDone
+	<-monitorDone
 	<-botDone
 	return err
 }
 
+// newMonitor собирает проверки цепочки и сервера; nil — мониторинг выключен (MONITOR_INTERVAL_SECONDS=0).
+func newMonitor(cfg *config.Config, manager *xray.Manager) *monitor.Monitor {
+	if cfg.MonitorIntervalSeconds <= 0 {
+		return nil
+	}
+	interval := time.Duration(cfg.MonitorIntervalSeconds) * time.Second
+	return monitor.New(monitor.DefaultChecks(monitorDeps(cfg, manager)), interval, cfg.MonitorFailThreshold)
+}
+
+// monitorDeps — откуда проверки берут данные; в dry_run Xray нет, остаются только диск и память.
+func monitorDeps(cfg *config.Config, manager *xray.Manager) monitor.Deps {
+	d := monitor.Deps{DataDir: "."}
+	if path, err := cfg.SQLitePath(); err == nil && path != ":memory:" {
+		d.DataDir = filepath.Dir(path)
+	}
+	if cfg.EffectiveXrayMode() == "dry_run" {
+		return d
+	}
+	if cfg.XrayProbePort > 0 {
+		d.ProbeAddr = net.JoinHostPort("127.0.0.1", strconv.Itoa(cfg.XrayProbePort))
+	}
+	d.ProbeURL = cfg.MonitorProbeURL
+	d.ChainSlow = time.Duration(cfg.MonitorChainSlowMs) * time.Millisecond
+	d.ExitSlow = time.Duration(cfg.MonitorExitSlowMs) * time.Millisecond
+	d.ExitServer = manager.ExitServer
+	d.XrayOnline = func() (int, error) {
+		online, err := manager.OnlineEmails()
+		return len(online), err
+	}
+	d.CertDomains = certDomains(cfg)
+	if len(d.CertDomains) > 0 {
+		d.CertAddr = net.JoinHostPort(cfg.XrayPublicHost, "443")
+	}
+	return d
+}
+
+// certDomains — домены с сертификатами Caddy: сайт-заглушка VPN и кабинет (IP-адреса пропускаются).
+func certDomains(cfg *config.Config) []string {
+	var out []string
+	add := func(host string) {
+		if host == "" || host == "localhost" || net.ParseIP(host) != nil {
+			return
+		}
+		for _, d := range out {
+			if d == host {
+				return
+			}
+		}
+		out = append(out, host)
+	}
+	add(cfg.XrayPublicHost)
+	if u, err := url.Parse(cfg.PublicBaseURL); err == nil && u.Scheme == "https" {
+		add(u.Hostname())
+	}
+	return out
+}
+
 // startBot запускает Telegram-бота, если задан TELEGRAM_BOT_TOKEN; канал закрывается после остановки.
-func startBot(ctx context.Context, cfg *config.Config, app *api.App) <-chan struct{} {
+// mon — источник тревог и кнопки «Состояние»; nil, если мониторинг выключен.
+func startBot(ctx context.Context, cfg *config.Config, app *api.App, mon *monitor.Monitor) <-chan struct{} {
 	done := make(chan struct{})
 	if cfg.TelegramBotToken == "" {
 		close(done)
@@ -243,6 +319,10 @@ func startBot(ctx context.Context, cfg *config.Config, app *api.App) <-chan stru
 	}
 	bot := telegram.New(telegram.NewClient(cfg.TelegramAPIURL, cfg.TelegramBotToken), chats, app)
 	app.SetNotifier(bot)
+	if mon != nil { // без проверки в интерфейс попал бы типизированный nil
+		bot.SetStatusSource(mon)
+		mon.SetNotifier(bot)
+	}
 	go func() {
 		defer close(done)
 		bot.Run(ctx)
