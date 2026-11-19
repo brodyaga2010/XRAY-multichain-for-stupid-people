@@ -25,6 +25,7 @@ export function KeyTable({
   titleExtra,
   showCount = true,
   headerExtra,
+  search,
   beforeList,
   empty,
   collapseRevoked = false,
@@ -40,7 +41,9 @@ export function KeyTable({
   showCount?: boolean;
   /** Кнопки справа в шапке списка. */
   headerExtra?: ReactNode;
-  /** Содержимое между шапкой и списком (форма, поиск). */
+  /** Поле поиска: на ПК стоит справа в одной строке с фильтрами. */
+  search?: ReactNode;
+  /** Содержимое между шапкой и списком (форма, сообщения). */
   beforeList?: ReactNode;
   /** Заменяет «Ключей нет», когда список пуст. */
   empty?: ReactNode;
@@ -89,13 +92,18 @@ export function KeyTable({
         </div>
       </div>
       {beforeList}
-      {showChips && (
-        <FilterChips
-          label="Фильтр по статусу"
-          options={collapseRevoked ? filtersWithoutRevoked : allFilters}
-          value={filter}
-          onChange={setFilter}
-        />
+      {(showChips || search) && (
+        <div className="list-toolbar">
+          {showChips && (
+            <FilterChips
+              label="Фильтр по статусу"
+              options={collapseRevoked ? filtersWithoutRevoked : allFilters}
+              value={filter}
+              onChange={setFilter}
+            />
+          )}
+          {search}
+        </div>
       )}
       {rendered.length === 0 ? (
         empty ?? <div className="empty">Ключей нет</div>

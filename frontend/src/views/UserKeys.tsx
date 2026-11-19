@@ -95,12 +95,8 @@ export function UserKeys({
               <span className="show-phone">Импорт</span>
             </button>
           }
-          beforeList={
-            <>
-              {importResult && <p className="muted">{importResult}</p>}
-              <SearchBox value={query} onChange={setQuery} placeholder="Поиск по названию, владельцу, статусу..." />
-            </>
-          }
+          beforeList={importResult && <p className="muted">{importResult}</p>}
+          search={<SearchBox value={query} onChange={setQuery} placeholder="Название или владелец" />}
         />
       </div>
     );
@@ -150,9 +146,9 @@ export function UserKeys({
               <p className="muted">Достигнут лимит: {user.key_limit}. Отзовите ненужный ключ, чтобы добавить новое устройство.</p>
             )}
             {formOpen && !limitReached && keys.length > 0 && <CreateKeyForm onCreate={createKey} autoFocus />}
-            {showSearch && <SearchBox value={query} onChange={setQuery} placeholder="Поиск ключей" />}
           </>
         }
+        search={showSearch && <SearchBox value={query} onChange={setQuery} placeholder="Поиск устройств" />}
       />
       <SubscriptionPanel setError={setError} />
     </div>

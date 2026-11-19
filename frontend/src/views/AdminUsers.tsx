@@ -1,11 +1,11 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { api, User, UserStatus, VpnKey } from "../api";
-import { CreateKeyForm } from "../components/CreateKeyForm";
 import { FilterChips } from "../components/FilterChips";
 import { KeyTable } from "../components/KeyTable";
 import { SearchBox } from "../components/SearchBox";
 import { Status } from "../components/Status";
+import { UserCard } from "../components/UserCard";
 import { useAutoRefresh, useMediaQuery } from "../hooks";
 import { formatDate, matchesSearch } from "../utils";
 
@@ -159,70 +159,17 @@ export function AdminUsers({
       )}
       {selected ? (
         <div className="stack">
-          <section className="selected-user-panel">
-            {isMobile && (
-              <button type="button" className="back-link" onClick={() => select(null)}>
-                <ArrowLeft size={18} /> Пользователи
-              </button>
-            )}
-            <h2 className="ellipsis user-card-email" title={selected.email}>
-              {selected.email}
-            </h2>
-            <dl className="user-facts">
-              <div>
-                <dt>Роль</dt>
-                <dd>{selected.role === "admin" ? "Администратор" : "Пользователь"}</dd>
-              </div>
-              <div>
-                <dt>Регистрация</dt>
-                <dd>{formatDate(selected.created_at)}</dd>
-              </div>
-              <div>
-                <dt>Статус</dt>
-                <dd>
-                  <Status status={selected.status} kind="user" />
-                </dd>
-              </div>
-            </dl>
-            <div className="action-row">
-              {selected.status === "pending" && (
-                <button className="primary" onClick={() => mutateUser(() => api.approveUser(selected.id))}>
-                  Подтвердить
-                </button>
-              )}
-              {selected.id !== currentUser.id && selected.status !== "suspended" && (
-                <button className="ghost danger" onClick={() => suspend(selected.id)}>
-                  Заблокировать
-                </button>
-              )}
-              {selected.status === "suspended" && (
-                <button className="primary" onClick={() => mutateUser(() => api.restoreUser(selected.id))}>
-                  Восстановить
-                </button>
-              )}
-            </div>
-            <LimitForm
-              key={`${selected.id}-${selected.key_limit}`}
-              user={selected}
-              onSave={(value) => mutateUser(() => api.updateLimit(selected.id, value))}
-            />
-            <div className="user-section">
-              <h3>Добавить ключ</h3>
-              {selected.status === "approved" ? (
-                <CreateKeyForm
-                  key={selected.id}
-                  placeholder="Название устройства"
-                  submitLabel="Добавить"
-                  onCreate={(name) => createKey(selected.id, name)}
-                />
-              ) : (
-                <p className="muted">
-                  Ключи можно добавлять только подтверждённым пользователям.{" "}
-                  {selected.status === "pending" ? "Сначала подтвердите аккаунт." : "Сначала восстановите аккаунт."}
-                </p>
-              )}
-            </div>
-          </section>
+          <UserCard
+            user={selected}
+            keys={keys}
+            isSelf={selected.id === currentUser.id}
+            onBack={isMobile ? () => select(null) : undefined}
+            onApprove={() => mutateUser(() => api.approveUser(selected.id))}
+            onSuspend={() => suspend(selected.id)}
+            onRestore={() => mutateUser(() => api.restoreUser(selected.id))}
+            onSaveLimit={(value) => mutateUser(() => api.updateLimit(selected.id, value))}
+            onCreateKey={(name) => createKey(selected.id, name)}
+          />
           <KeyTable keys={keys} onRevoke={revokeKey} autoOpenKeyId={newKeyId} />
         </div>
       ) : (
@@ -232,40 +179,3 @@ export function AdminUsers({
   );
 }
 
-function LimitForm({ user, onSave }: { user: User; onSave: (value: number) => Promise<void> }) {
-  const [draft, setDraft] = useState(String(user.key_limit));
-  const [busy, setBusy] = useState(false);
-  const value = Number(draft);
-  const valid = draft !== "" && Number.isInteger(value) && value >= 0 && value <= 100;
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!valid || value === user.key_limit) return;
-    setBusy(true);
-    try {
-      await onSave(value);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form className="limit-form user-section" onSubmit={submit}>
-      <label>
-        Лимит ключей
-        <input
-          className="limit-input"
-          type="number"
-          inputMode="numeric"
-          min={0}
-          max={100}
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-        />
-      </label>
-      <button className="ghost" disabled={busy || !valid || value === user.key_limit}>
-        Сохранить
-      </button>
-    </form>
-  );
-}
