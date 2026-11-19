@@ -54,7 +54,7 @@ export function UserCard({
 
   return (
     <Card>
-      <CardContent className="grid gap-5">
+      <CardContent className="@container grid gap-5">
         {onBack && (
           <Button variant="ghost" className="-ml-2 justify-self-start" onClick={onBack}>
             <ArrowLeft />
@@ -94,20 +94,27 @@ export function UserCard({
           </div>
         </div>
 
-        <dl className="grid grid-cols-2 overflow-hidden rounded-lg border bg-muted/40 sm:grid-cols-4">
+        <dl className="grid grid-cols-2 overflow-hidden rounded-lg border bg-muted/40 @2xl:grid-cols-4">
           {stats.map((stat, index) => (
             <div
               key={stat.label}
               className={
                 "grid min-w-0 gap-0.5 px-3.5 py-2.5 " +
                 (index % 2 === 1 ? "border-l " : "") +
-                (index >= 2 ? "max-sm:border-t sm:border-l " : "")
+                (index >= 2 ? "border-t @2xl:border-t-0 @2xl:border-l " : "")
               }
             >
               <dt className="text-xs text-muted-foreground">{stat.label}</dt>
-              <dd className={stat.text ? "truncate text-sm leading-7 font-medium" : "truncate text-lg font-semibold tabular-nums"}>
+              <dd
+                className={
+                  stat.text
+                    ? "truncate text-sm leading-7 font-medium"
+                    : "flex flex-wrap items-baseline gap-x-1.5 text-lg font-semibold whitespace-nowrap tabular-nums"
+                }
+                title={stat.extra ? `${stat.value} ${stat.extra}` : String(stat.value)}
+              >
                 {stat.value}
-                {stat.extra && <span className="ml-1 text-sm font-normal text-muted-foreground">{stat.extra}</span>}
+                {stat.extra && <span className="text-sm font-normal text-muted-foreground">{stat.extra}</span>}
               </dd>
             </div>
           ))}

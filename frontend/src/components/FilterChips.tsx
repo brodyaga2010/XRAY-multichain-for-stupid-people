@@ -19,10 +19,10 @@ export function FilterChips<T extends string>({
   className?: string;
 }) {
   return (
-    <Tabs value={value} onValueChange={(next) => onChange(next as T)} className={className}>
-      <TabsList aria-label={label} className={cn("h-9 max-w-full overflow-x-auto", compact && "w-full")}>
+    <Tabs value={value} onValueChange={(next) => onChange(next as T)} className={cn("min-w-0", className)}>
+      <TabsList aria-label={label} className={cn("h-9 w-full max-w-full scrollbar-none overflow-x-auto", !compact && "sm:w-fit")}>
         {options.map((item) => (
-          <TabsTrigger key={item.id} value={item.id} className={compact ? "px-1 text-xs" : "px-3"}>
+          <TabsTrigger key={item.id} value={item.id} className={compact ? "px-1 text-xs" : "px-1.5 text-xs sm:px-3 sm:text-sm"}>
             {item.label}
           </TabsTrigger>
         ))}

@@ -64,7 +64,7 @@ export function AuditLog({ setError }: { setError: (error: string) => void }) {
           <p className="py-10 text-center text-sm text-muted-foreground">Записей нет</p>
         ) : (
           <>
-            <div className="hidden overflow-hidden rounded-lg border @2xl:block">
+            <div className="hidden overflow-hidden rounded-lg border @3xl:block">
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow>
@@ -94,7 +94,7 @@ export function AuditLog({ setError }: { setError: (error: string) => void }) {
                 </TableBody>
               </Table>
             </div>
-            <ul className="grid divide-y @2xl:hidden">
+            <ul className="grid divide-y @3xl:hidden">
               {entries.map((entry) => (
                 <li key={entry.id} className="grid gap-0.5 py-2.5 first:pt-0 last:pb-0">
                   <div className="flex justify-between gap-3 text-xs text-muted-foreground">

@@ -102,18 +102,19 @@ export function KeyTable({
       <CardContent className="@container grid gap-4">
         {beforeList}
         {(showChips || search) && (
-          <div className="flex flex-col-reverse gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 flex-col-reverse gap-3 md:flex-row md:items-center md:justify-between">
             {showChips ? (
               <FilterChips
                 label="Фильтр по статусу"
                 options={collapseRevoked ? filtersWithoutRevoked : allFilters}
                 value={filter}
                 onChange={setFilter}
+                className="md:shrink-0"
               />
             ) : (
               <span />
             )}
-            {search && <div className="md:w-72">{search}</div>}
+            {search && <div className="min-w-0 md:w-72">{search}</div>}
           </div>
         )}
         {rendered.length === 0 ? (
@@ -121,7 +122,7 @@ export function KeyTable({
         ) : (
           <>
             {!cardsOnly && (
-              <div className="hidden overflow-hidden rounded-lg border @3xl:block">
+              <div className="hidden overflow-hidden rounded-lg border @4xl:block">
                 <Table>
                   <TableHeader className="bg-muted/50">
                     <TableRow>
@@ -184,7 +185,7 @@ export function KeyTable({
                 </Table>
               </div>
             )}
-            <div className={cn("grid gap-3 @lg:grid-cols-2 @4xl:grid-cols-3", !cardsOnly && "@3xl:hidden")}>
+            <div className={cn("grid gap-3 @lg:grid-cols-2 @4xl:grid-cols-3", !cardsOnly && "@4xl:hidden")}>
               {rendered.map((key) => (
                 <article
                   key={key.id}

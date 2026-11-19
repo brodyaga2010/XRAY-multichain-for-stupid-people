@@ -114,9 +114,9 @@ export function AdminUsers({
   const showList = !isMobile || !selected;
 
   return (
-    <div className="grid items-start gap-4 md:grid-cols-[minmax(280px,360px)_minmax(0,1fr)] md:gap-6">
+    <div className="grid items-start gap-4 min-[901px]:grid-cols-[minmax(300px,340px)_minmax(0,1fr)] md:gap-6">
       {showList && (
-        <Card className="min-w-0 gap-3 md:sticky md:top-20">
+        <Card className="min-w-0 gap-3 min-[901px]:sticky min-[901px]:top-20">
           <CardHeader>
             <CardTitle>Пользователи</CardTitle>
             <CardDescription>показано: {filteredUsers.length}</CardDescription>
