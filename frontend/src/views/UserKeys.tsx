@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Plus } from "lucide-react";
-import { api, User, VpnKey } from "../api";
-import { CreateKeyForm } from "../components/CreateKeyForm";
-import { KeyTable } from "../components/KeyTable";
-import { SearchBox } from "../components/SearchBox";
-import { SubscriptionPanel } from "../components/SubscriptionPanel";
-import { useAutoRefresh } from "../hooks";
-import { matchesSearch } from "../utils";
+import { api, User, VpnKey } from "@/api";
+import { Button } from "@/components/ui/button";
+import { CreateKeyForm } from "@/components/CreateKeyForm";
+import { KeyTable } from "@/components/KeyTable";
+import { SearchBox } from "@/components/SearchBox";
+import { SubscriptionPanel } from "@/components/SubscriptionPanel";
+import { useAutoRefresh } from "@/hooks";
+import { matchesSearch } from "@/utils";
 
 const SEARCH_THRESHOLD = 5;
 
@@ -83,43 +84,49 @@ export function UserKeys({
 
   if (isAdmin) {
     return (
-      <div className="stack">
-        <KeyTable
-          keys={filteredKeys}
-          showOwner
-          onRevoke={revoke}
-          headerExtra={
-            <button className="ghost" type="button" disabled={busy} onClick={importKeys} title="Импортировать ключи с сервера">
-              <Download size={16} />
-              <span className="hide-phone">Импортировать ключи с сервера</span>
-              <span className="show-phone">Импорт</span>
-            </button>
-          }
-          beforeList={importResult && <p className="muted">{importResult}</p>}
-          search={<SearchBox value={query} onChange={setQuery} placeholder="Название или владелец" />}
-        />
-      </div>
+      <KeyTable
+        keys={filteredKeys}
+        showOwner
+        onRevoke={revoke}
+        headerExtra={
+          <Button variant="outline" disabled={busy} onClick={importKeys} title="Импортировать ключи с сервера">
+            <Download />
+            <span className="max-sm:hidden">Импортировать с сервера</span>
+            <span className="sm:hidden">Импорт</span>
+          </Button>
+        }
+        beforeList={importResult && <p className="text-sm text-muted-foreground">{importResult}</p>}
+        search={<SearchBox value={query} onChange={setQuery} placeholder="Название или владелец" />}
+      />
     );
   }
 
   const emptyState = (
-    <div className="empty-state">
-      <h3>У вас пока нет ключей</h3>
-      <p className="muted">
+    <div className="grid justify-items-start gap-3 rounded-xl border border-dashed p-5">
+      <h3 className="font-medium">У вас пока нет ключей</h3>
+      <p className="text-sm text-muted-foreground">
         Ключ привязывается к одному устройству. Назовите устройство (например, «Телефон») — и мы создадим ключ для
         подключения.
       </p>
-      <CreateKeyForm onCreate={createKey} autoFocus />
+      <div className="w-full max-w-md">
+        <CreateKeyForm onCreate={createKey} autoFocus />
+      </div>
     </div>
   );
 
   return (
-    <div className="user-keys-layout">
+    <div className="grid items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
       <KeyTable
         keys={filteredKeys}
         cardsOnly
         title="Мои устройства"
-        titleExtra={keys.length > 0 && <span className="title-count">{activeCount} из {user.key_limit}</span>}
+        titleExtra={
+          keys.length > 0 && (
+            <span className="text-sm font-normal text-muted-foreground tabular-nums">
+              {activeCount} из {user.key_limit}
+            </span>
+          )
+        }
         onRevoke={revoke}
         showCount={false}
         collapseRevoked
@@ -127,30 +134,31 @@ export function UserKeys({
         empty={loaded && keys.length === 0 ? emptyState : undefined}
         headerExtra={
           keys.length > 0 && (
-            <button
-              className={`small add-device ${formOpen ? "open" : ""}`}
-              type="button"
+            <Button
+              variant={formOpen ? "secondary" : "default"}
               disabled={limitReached}
               aria-expanded={formOpen}
               title={limitReached ? "Достигнут лимит ключей" : undefined}
               onClick={() => setFormOpen((current) => !current)}
             >
-              <Plus size={16} />
-              <span>Добавить</span>
-            </button>
+              <Plus />
+              Добавить
+            </Button>
           )
         }
         beforeList={
           <>
             {limitReached && keys.length > 0 && (
-              <p className="muted">Достигнут лимит: {user.key_limit}. Отзовите ненужный ключ, чтобы добавить новое устройство.</p>
+              <p className="text-sm text-muted-foreground">
+                Достигнут лимит: {user.key_limit}. Отзовите ненужный ключ, чтобы добавить новое устройство.
+              </p>
             )}
             {formOpen && !limitReached && keys.length > 0 && <CreateKeyForm onCreate={createKey} autoFocus />}
           </>
         }
         search={showSearch && <SearchBox value={query} onChange={setQuery} placeholder="Поиск устройств" />}
       />
-      <SubscriptionPanel setError={setError} />
+      <SubscriptionPanel setError={setError} className="xl:sticky xl:top-20" />
     </div>
   );
 }

@@ -1,5 +1,7 @@
 import { FormEvent, useState } from "react";
 import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export function CreateKeyForm({
   onCreate,
@@ -31,21 +33,25 @@ export function CreateKeyForm({
   }
 
   return (
-    <form className="inline-form" onSubmit={submit}>
-      <input
-        value={name}
-        onChange={(event) => setName(event.target.value)}
-        placeholder={placeholder}
-        aria-label="Название устройства"
-        minLength={1}
-        maxLength={60}
-        autoFocus={autoFocus}
-        required
-      />
-      <button className="primary" disabled={busy || !name.trim()}>
-        <Plus size={17} /> {busy ? "Создание..." : submitLabel}
-      </button>
-      {error && <p className="error inline-form-error">{error}</p>}
+    <form className="grid gap-2" onSubmit={submit}>
+      <div className="flex gap-2 max-sm:flex-col">
+        <Input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder={placeholder}
+          aria-label="Название устройства"
+          minLength={1}
+          maxLength={60}
+          autoFocus={autoFocus}
+          required
+          className="h-9"
+        />
+        <Button size="lg" disabled={busy || !name.trim()}>
+          <Plus />
+          {busy ? "Создание..." : submitLabel}
+        </Button>
+      </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </form>
   );
 }

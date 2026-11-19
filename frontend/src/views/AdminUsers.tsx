@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { api, User, UserStatus, VpnKey } from "../api";
-import { FilterChips } from "../components/FilterChips";
-import { KeyTable } from "../components/KeyTable";
-import { SearchBox } from "../components/SearchBox";
-import { Status } from "../components/Status";
-import { UserCard } from "../components/UserCard";
-import { useAutoRefresh, useMediaQuery } from "../hooks";
-import { formatDate, matchesSearch } from "../utils";
+import { api, User, UserStatus, VpnKey } from "@/api";
+import { FilterChips } from "@/components/FilterChips";
+import { KeyTable } from "@/components/KeyTable";
+import { SearchBox } from "@/components/SearchBox";
+import { StatusBadge } from "@/components/StatusBadge";
+import { UserAvatar } from "@/components/UserAvatar";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+import { UserCard } from "@/components/UserCard";
+import { useAutoRefresh, useMediaQuery } from "@/hooks";
+import { matchesSearch } from "@/utils";
 
 type UserFilter = "all" | UserStatus;
 
@@ -111,54 +114,57 @@ export function AdminUsers({
   const showList = !isMobile || !selected;
 
   return (
-    <section className="admin-layout">
+    <div className="grid items-start gap-4 md:grid-cols-[minmax(280px,360px)_minmax(0,1fr)] md:gap-6">
       {showList && (
-        <div className="user-picker">
-          <div className="panel-heading">
-            <h2>Пользователи</h2>
-            <span>показано: {filteredUsers.length}</span>
-          </div>
-          <SearchBox value={query} onChange={setQuery} placeholder="Поиск по почте, статусу, роли..." />
-          <FilterChips label="Фильтр по статусу" options={userFilters} value={filter} onChange={setFilter} />
-          <div className="user-list">
-            {filteredUsers.map((item) => (
-              <div
-                key={item.id}
-                role="button"
-                tabIndex={0}
-                className={`user-row ${selected?.id === item.id ? "selected" : ""}`}
-                onClick={() => select(item)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    select(item);
-                  }
-                }}
-              >
-                <div className="user-main">
-                  <div className="user-row-top">
-                    <strong className="ellipsis" title={item.email}>
-                      {item.email}
-                    </strong>
-                    <div className="user-row-badges">
-                      {item.id === currentUser.id && <span className="status approved">Вы</span>}
-                      <Status status={item.status} kind="user" />
+        <Card className="min-w-0 gap-3 md:sticky md:top-20">
+          <CardHeader>
+            <CardTitle>Пользователи</CardTitle>
+            <CardDescription>показано: {filteredUsers.length}</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <SearchBox value={query} onChange={setQuery} placeholder="Почта, статус, роль" />
+            <FilterChips
+              label="Фильтр по статусу"
+              options={userFilters}
+              value={filter}
+              onChange={setFilter}
+              compact
+            />
+            <ul className="-mx-2 grid gap-0.5">
+              {filteredUsers.map((item) => (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    onClick={() => select(item)}
+                    aria-current={selected?.id === item.id ? "true" : undefined}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted",
+                      selected?.id === item.id && "bg-accent hover:bg-accent"
+                    )}
+                  >
+                    <UserAvatar email={item.email} />
+                    <div className="grid min-w-0 flex-1 gap-0.5">
+                      <span className="truncate text-sm font-medium" title={item.email}>
+                        {item.email}
+                      </span>
+                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <StatusBadge status={item.status} kind="user" className="h-4.5 px-1.5 text-[11px]" />
+                        {item.id === currentUser.id ? "это вы" : `лимит ${item.key_limit}`}
+                      </span>
                     </div>
-                  </div>
-                  <span className="ellipsis">
-                    {item.role === "admin" ? "Администратор" : "Пользователь"} / лимит {item.key_limit} /{" "}
-                    {formatDate(item.created_at)}
-                  </span>
-                </div>
-                <ChevronRight size={16} className="user-row-arrow" />
-              </div>
-            ))}
-            {filteredUsers.length === 0 && <div className="empty">Пользователи не найдены</div>}
-          </div>
-        </div>
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground md:hidden" />
+                  </button>
+                </li>
+              ))}
+              {filteredUsers.length === 0 && (
+                <li className="py-6 text-center text-sm text-muted-foreground">Пользователи не найдены</li>
+              )}
+            </ul>
+          </CardContent>
+        </Card>
       )}
       {selected ? (
-        <div className="stack">
+        <div className="grid min-w-0 gap-4 md:gap-6">
           <UserCard
             user={selected}
             keys={keys}
@@ -173,9 +179,12 @@ export function AdminUsers({
           <KeyTable keys={keys} onRevoke={revokeKey} autoOpenKeyId={newKeyId} />
         </div>
       ) : (
-        !isMobile && <div className="empty-panel">Выберите пользователя, чтобы управлять доступом и ключами</div>
+        !isMobile && (
+          <Card className="grid min-h-48 place-items-center text-sm text-muted-foreground">
+            Выберите пользователя, чтобы управлять доступом и ключами
+          </Card>
+        )
       )}
-    </section>
+    </div>
   );
 }
-

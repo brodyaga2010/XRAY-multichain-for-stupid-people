@@ -1,10 +1,13 @@
 import { QrCode, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { api } from "@/api";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { CopyButton } from "./CopyButton";
 import { QrImage } from "./QrImage";
 
-export function SubscriptionPanel({ setError }: { setError: (error: string) => void }) {
+export function SubscriptionPanel({ setError, className }: { setError: (error: string) => void; className?: string }) {
   const [url, setUrl] = useState("");
   const [showQr, setShowQr] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -31,24 +34,26 @@ export function SubscriptionPanel({ setError }: { setError: (error: string) => v
   }
 
   return (
-    <section className="tool-panel subscription-panel">
-      <div className="panel-heading">
-        <h2>Подписка</h2>
-      </div>
-      <p className="muted">Одна ссылка для Hiddify, v2rayNG, v2rayN, Streisand, Happ — подтянет все ваши ключи.</p>
-      <code className="link-line">{url || "Загрузка ссылки..."}</code>
-      <div className="link-buttons">
-        <CopyButton text={url} label="Скопировать ссылку" className="ghost" />
-        <button type="button" className="ghost" disabled={!url} onClick={() => setShowQr((current) => !current)}>
-          <QrCode size={16} />
-          <span>QR-код</span>
-        </button>
-        <button type="button" className="ghost" disabled={busy} onClick={rotate}>
-          <RefreshCw size={16} />
-          <span>Перевыпустить</span>
-        </button>
-      </div>
-      {showQr && url && <QrImage value={url} />}
-    </section>
+    <Card className={cn("gap-4", className)}>
+      <CardHeader>
+        <CardTitle>Подписка</CardTitle>
+        <CardDescription>Одна ссылка для Hiddify, v2rayNG, v2rayN, Streisand, Happ — подтянет все ваши ключи.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <code className="truncate rounded-md border bg-muted/40 px-3 py-2 font-mono text-xs">{url || "Загрузка ссылки..."}</code>
+        <div className="grid grid-cols-2 gap-2">
+          <CopyButton text={url} label="Скопировать" size="lg" className="col-span-2" />
+          <Button type="button" variant="outline" size="lg" disabled={!url} onClick={() => setShowQr((current) => !current)}>
+            <QrCode />
+            QR-код
+          </Button>
+          <Button type="button" variant="outline" size="lg" disabled={busy} onClick={rotate}>
+            <RefreshCw />
+            Перевыпустить
+          </Button>
+        </div>
+        {showQr && url && <QrImage value={url} />}
+      </CardContent>
+    </Card>
   );
 }

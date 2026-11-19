@@ -1,11 +1,15 @@
 import { Link2, Trash2 } from "lucide-react";
 import { ReactNode, useEffect, useMemo, useState } from "react";
-import { KeyStatus, VpnKey } from "../api";
-import { formatDate, keyTitle, shortUuid } from "../utils";
+import { KeyStatus, VpnKey } from "@/api";
+import { Button } from "@/components/ui/button";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
+import { formatDate, keyTitle, shortUuid } from "@/utils";
 import { FilterChips } from "./FilterChips";
 import { OnlineIndicator, Traffic } from "./KeyActivity";
 import { KeyModal } from "./KeyModal";
-import { Status } from "./Status";
+import { StatusBadge } from "./StatusBadge";
 
 type KeyFilter = "all" | KeyStatus;
 
@@ -16,6 +20,9 @@ const allFilters: Array<{ id: KeyFilter; label: string }> = [
   { id: "revoked", label: "Отозванные" }
 ];
 const filtersWithoutRevoked = allFilters.filter((item) => item.id !== "revoked");
+
+const connectClass = "bg-accent text-accent-foreground hover:bg-accent/70";
+const deleteClass = "text-muted-foreground hover:bg-destructive/10 hover:text-destructive";
 
 export function KeyTable({
   keys,
@@ -49,7 +56,7 @@ export function KeyTable({
   empty?: ReactNode;
   /** Отозванные ключи скрыты под ссылкой «Показать отозванные». */
   collapseRevoked?: boolean;
-  /** Открыть модалку этого ключа (например, только что созданного). */
+  /** Открыть окно этого ключа (например, только что созданного). */
   autoOpenKeyId?: number | null;
   /** Всегда карточки (сеткой на широком экране), без таблицы — для личного списка устройств. */
   cardsOnly?: boolean;
@@ -79,150 +86,164 @@ export function KeyTable({
     if (window.confirm(`Отозвать ключ «${keyTitle(key)}»?`)) void onRevoke(key.id);
   }
 
+  const status = (key: VpnKey) =>
+    key.status === "active" ? <OnlineIndicator keyItem={key} /> : <StatusBadge status={key.status} />;
+
   return (
-    <div className={`table-panel key-table ${cardsOnly ? "cards-only" : ""}`}>
-      <div className="panel-heading">
-        <h2>
+    <Card className="gap-4">
+      <CardHeader>
+        <CardTitle className="flex items-baseline gap-2">
           {title}
           {titleExtra}
-        </h2>
-        <div className="panel-heading-side">
-          {showCount && <span>активных: {activeCount}</span>}
-          {headerExtra}
-        </div>
-      </div>
-      {beforeList}
-      {(showChips || search) && (
-        <div className="list-toolbar">
-          {showChips && (
-            <FilterChips
-              label="Фильтр по статусу"
-              options={collapseRevoked ? filtersWithoutRevoked : allFilters}
-              value={filter}
-              onChange={setFilter}
-            />
-          )}
-          {search}
-        </div>
-      )}
-      {rendered.length === 0 ? (
-        empty ?? <div className="empty">Ключей нет</div>
-      ) : (
-        <>
-          <div className="responsive-table">
-            <table>
-              <thead>
-                <tr>
-                  <th className="col-name">Ключ</th>
-                  {showOwner && <th>Владелец</th>}
-                  <th>Подключение</th>
-                  <th>Трафик</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rendered.map((key) => (
-                  <tr key={key.id} className={key.status === "revoked" ? "dimmed" : ""}>
-                    <td className="col-name">
-                      <div className="table-key">
-                        <strong className="clamp-2" title={keyTitle(key)}>
-                          {keyTitle(key)}
-                        </strong>
-                        <span className="uuid">
-                          {showOwner ? `${shortUuid(key.uuid)} · ` : ""}с {formatDate(key.created_at)}
-                        </span>
-                      </div>
-                    </td>
-                    {showOwner && (
-                      <td>
-                        <span className="ellipsis owner-cell" title={key.owner_email ?? undefined}>
-                          {key.owner_email ?? "—"}
-                        </span>
-                      </td>
-                    )}
-                    <td>
-                      <div className="status-cell">
-                        {key.status === "active" ? <OnlineIndicator keyItem={key} /> : <Status status={key.status} />}
-                      </div>
-                    </td>
-                    <td>
-                      <Traffic keyItem={key} />
-                    </td>
-                    <td>
-                      {key.status !== "revoked" && (
-                        <div className="row-actions">
-                          {key.status === "active" && (
-                            <button className="connect-button compact" onClick={() => setOpenKeyId(key.id)}>
-                              <Link2 size={15} /> Подключить
-                            </button>
+          {showCount && <span className="text-sm font-normal text-muted-foreground tabular-nums">активных: {activeCount}</span>}
+        </CardTitle>
+        {headerExtra && <CardAction>{headerExtra}</CardAction>}
+      </CardHeader>
+      <CardContent className="@container grid gap-4">
+        {beforeList}
+        {(showChips || search) && (
+          <div className="flex flex-col-reverse gap-3 md:flex-row md:items-center md:justify-between">
+            {showChips ? (
+              <FilterChips
+                label="Фильтр по статусу"
+                options={collapseRevoked ? filtersWithoutRevoked : allFilters}
+                value={filter}
+                onChange={setFilter}
+              />
+            ) : (
+              <span />
+            )}
+            {search && <div className="md:w-72">{search}</div>}
+          </div>
+        )}
+        {rendered.length === 0 ? (
+          empty ?? <p className="py-10 text-center text-sm text-muted-foreground">Ключей нет</p>
+        ) : (
+          <>
+            {!cardsOnly && (
+              <div className="hidden overflow-hidden rounded-lg border @3xl:block">
+                <Table>
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead className="pl-4">Ключ</TableHead>
+                      {showOwner && <TableHead>Владелец</TableHead>}
+                      <TableHead>Подключение</TableHead>
+                      <TableHead>Трафик</TableHead>
+                      <TableHead className="w-0" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rendered.map((key) => (
+                      <TableRow key={key.id} className={cn(key.status === "revoked" && "opacity-60")}>
+                        <TableCell className="max-w-64 pl-4">
+                          <div className="grid">
+                            <span className="truncate font-medium" title={keyTitle(key)}>
+                              {keyTitle(key)}
+                            </span>
+                            <span className="font-mono text-xs text-muted-foreground">
+                              {shortUuid(key.uuid)} · с {formatDate(key.created_at)}
+                            </span>
+                          </div>
+                        </TableCell>
+                        {showOwner && (
+                          <TableCell className="max-w-56">
+                            <span className="block truncate" title={key.owner_email ?? undefined}>
+                              {key.owner_email ?? "—"}
+                            </span>
+                          </TableCell>
+                        )}
+                        <TableCell>{status(key)}</TableCell>
+                        <TableCell>
+                          <Traffic keyItem={key} />
+                        </TableCell>
+                        <TableCell className="pr-3">
+                          {key.status !== "revoked" && (
+                            <div className="flex justify-end gap-1">
+                              {key.status === "active" && (
+                                <Button size="sm" className={connectClass} onClick={() => setOpenKeyId(key.id)}>
+                                  <Link2 />
+                                  Подключить
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                className={deleteClass}
+                                title="Отозвать ключ"
+                                aria-label="Отозвать ключ"
+                                onClick={() => confirmRevoke(key)}
+                              >
+                                <Trash2 />
+                              </Button>
+                            </div>
                           )}
-                          <button
-                            className="icon-button danger"
-                            title="Отозвать"
-                            aria-label="Отозвать ключ"
-                            onClick={() => confirmRevoke(key)}
-                          >
-                            <Trash2 size={17} />
-                          </button>
-                        </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+            <div className={cn("grid gap-3 @lg:grid-cols-2 @4xl:grid-cols-3", !cardsOnly && "@3xl:hidden")}>
+              {rendered.map((key) => (
+                <article
+                  key={key.id}
+                  className={cn(
+                    "grid content-start gap-2.5 rounded-xl border bg-card p-3.5 transition-colors hover:border-foreground/20",
+                    key.status === "revoked" && "opacity-60"
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="grid min-w-0 gap-0.5">
+                      <strong className="line-clamp-2 font-medium" title={keyTitle(key)}>
+                        {keyTitle(key)}
+                      </strong>
+                      {showOwner && key.owner_email && (
+                        <span className="truncate text-xs text-muted-foreground" title={key.owner_email}>
+                          {key.owner_email}
+                        </span>
                       )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="key-cards">
-            {rendered.map((key) => (
-              <article className={`key-card ${key.status === "revoked" ? "dimmed" : ""}`} key={key.id}>
-                <div className="key-card-head">
-                  <div className="key-card-title">
-                    <strong className="clamp-2" title={keyTitle(key)}>
-                      {keyTitle(key)}
-                    </strong>
-                    {showOwner && key.owner_email && (
-                      <span className="key-card-subtitle ellipsis" title={key.owner_email}>
-                        {key.owner_email}
-                      </span>
-                    )}
+                    </div>
+                    <span className="shrink-0 pt-0.5">{status(key)}</span>
                   </div>
-                  {key.status === "active" ? <OnlineIndicator keyItem={key} /> : <Status status={key.status} />}
-                </div>
-                <div className="key-card-line">
-                  <Traffic keyItem={key} />
-                  <span>с {formatDate(key.created_at)}</span>
-                </div>
-                {key.status !== "revoked" && (
-                  <div className="key-card-actions">
-                    {key.status === "active" ? (
-                      <button className="connect-button" onClick={() => setOpenKeyId(key.id)}>
-                        <Link2 size={17} />
-                        <span>Подключить</span>
-                      </button>
-                    ) : (
-                      <span className="muted key-card-note">Отключён вместе с пользователем</span>
-                    )}
-                    <button
-                      className="icon-button danger"
-                      title="Отозвать ключ"
-                      aria-label="Отозвать ключ"
-                      onClick={() => confirmRevoke(key)}
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    <Traffic keyItem={key} className="text-foreground" />
+                    <span>с {formatDate(key.created_at)}</span>
                   </div>
-                )}
-              </article>
-            ))}
-          </div>
-        </>
-      )}
-      {collapseRevoked && revokedKeys.length > 0 && (
-        <button type="button" className="link-button" onClick={() => setShowRevoked((current) => !current)}>
-          {showRevoked ? "Скрыть отозванные" : `Показать отозванные (${revokedKeys.length})`}
-        </button>
-      )}
+                  {key.status !== "revoked" && (
+                    <div className="mt-1 flex items-center gap-2">
+                      {key.status === "active" ? (
+                        <Button size="lg" className={cn("h-10 flex-1 sm:h-9", connectClass)} onClick={() => setOpenKeyId(key.id)}>
+                          <Link2 />
+                          Подключить
+                        </Button>
+                      ) : (
+                        <span className="flex-1 text-sm text-muted-foreground">Отключён вместе с пользователем</span>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon-lg"
+                        className={cn("size-10 sm:size-9", deleteClass)}
+                        title="Отозвать ключ"
+                        aria-label="Отозвать ключ"
+                        onClick={() => confirmRevoke(key)}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          </>
+        )}
+        {collapseRevoked && revokedKeys.length > 0 && (
+          <Button variant="link" className="h-auto justify-self-start p-0" onClick={() => setShowRevoked((current) => !current)}>
+            {showRevoked ? "Скрыть отозванные" : `Показать отозванные (${revokedKeys.length})`}
+          </Button>
+        )}
+      </CardContent>
       {openKey && <KeyModal keyItem={openKey} onClose={() => setOpenKeyId(null)} />}
-    </div>
+    </Card>
   );
 }

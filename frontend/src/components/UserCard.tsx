@@ -1,9 +1,15 @@
 import { FormEvent, useState } from "react";
 import { ArrowLeft } from "lucide-react";
-import { User, VpnKey } from "../api";
-import { formatBytes, formatDate, formatSeen } from "../utils";
+import { User, VpnKey } from "@/api";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { formatBytes, formatDate, formatSeen } from "@/utils";
 import { CreateKeyForm } from "./CreateKeyForm";
-import { Status } from "./Status";
+import { StatusBadge } from "./StatusBadge";
+import { UserAvatar } from "./UserAvatar";
 
 /** Карточка пользователя в админке: кто это, что с его ключами и что с ним можно сделать. */
 export function UserCard({
@@ -39,85 +45,91 @@ export function UserCard({
   }, null);
   const activity = online > 0 ? "сейчас в сети" : lastSeen ? formatSeen(lastSeen) : "не подключался";
 
+  const stats = [
+    { label: "Ключи", value: active, extra: `из ${user.key_limit}` },
+    { label: "В сети", value: online },
+    { label: "Трафик", value: `↓ ${formatBytes(down)}`, extra: `↑ ${formatBytes(up)}` },
+    { label: "Активность", value: activity, text: true }
+  ];
+
   return (
-    <section className="selected-user-panel user-card">
-      {onBack && (
-        <button type="button" className="back-link" onClick={onBack}>
-          <ArrowLeft size={18} /> Пользователи
-        </button>
-      )}
-      <header className="user-card-head">
-        <span className="user-avatar" aria-hidden="true">
-          {user.email.slice(0, 1).toUpperCase()}
-        </span>
-        <div className="user-card-id">
-          <h2 className="ellipsis" title={user.email}>
-            {user.email}
-          </h2>
-          <div className="user-card-sub">
-            <Status status={user.status} kind="user" />
-            {isSelf && <span className="status approved">Вы</span>}
-            <span>
-              {user.role === "admin" ? "Администратор" : "Пользователь"} · с {formatDate(user.created_at)}
-            </span>
+    <Card>
+      <CardContent className="grid gap-5">
+        {onBack && (
+          <Button variant="ghost" className="-ml-2 justify-self-start" onClick={onBack}>
+            <ArrowLeft />
+            Пользователи
+          </Button>
+        )}
+        <div className="flex flex-wrap items-center gap-3">
+          <UserAvatar email={user.email} size="lg" />
+          <div className="grid min-w-0 flex-1 gap-1">
+            <h2 className="truncate text-lg font-semibold" title={user.email}>
+              {user.email}
+            </h2>
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <StatusBadge status={user.status} kind="user" />
+              <span>
+                {user.role === "admin" ? "Администратор" : "Пользователь"}
+                {isSelf && " (вы)"} · с {formatDate(user.created_at)}
+              </span>
+            </div>
+          </div>
+          <div className="flex gap-2 max-sm:w-full max-sm:[&>*]:flex-1">
+            {user.status === "pending" && (
+              <Button size="lg" onClick={onApprove}>
+                Подтвердить
+              </Button>
+            )}
+            {!isSelf && user.status !== "suspended" && (
+              <Button variant="destructive" size="lg" onClick={onSuspend}>
+                {user.status === "pending" ? "Отклонить" : "Заблокировать"}
+              </Button>
+            )}
+            {user.status === "suspended" && (
+              <Button size="lg" onClick={onRestore}>
+                Восстановить
+              </Button>
+            )}
           </div>
         </div>
-        <div className="user-card-actions">
-          {user.status === "pending" && (
-            <button className="primary" onClick={onApprove}>
-              Подтвердить
-            </button>
-          )}
-          {!isSelf && user.status !== "suspended" && (
-            <button className="ghost danger" onClick={onSuspend}>
-              {user.status === "pending" ? "Отклонить" : "Заблокировать"}
-            </button>
-          )}
-          {user.status === "suspended" && (
-            <button className="primary" onClick={onRestore}>
-              Восстановить
-            </button>
-          )}
-        </div>
-      </header>
 
-      <dl className="user-stats">
-        <div>
-          <dt>Ключи</dt>
-          <dd>
-            {active} <small>из {user.key_limit}</small>
-          </dd>
-        </div>
-        <div>
-          <dt>В сети</dt>
-          <dd>{online}</dd>
-        </div>
-        <div>
-          <dt>Трафик</dt>
-          <dd>
-            ↓ {formatBytes(down)} <small>↑ {formatBytes(up)}</small>
-          </dd>
-        </div>
-        <div>
-          <dt>Активность</dt>
-          <dd className="user-stats-text">{activity}</dd>
-        </div>
-      </dl>
+        <dl className="grid grid-cols-2 overflow-hidden rounded-lg border bg-muted/40 sm:grid-cols-4">
+          {stats.map((stat, index) => (
+            <div
+              key={stat.label}
+              className={
+                "grid min-w-0 gap-0.5 px-3.5 py-2.5 " +
+                (index % 2 === 1 ? "border-l " : "") +
+                (index >= 2 ? "max-sm:border-t sm:border-l " : "")
+              }
+            >
+              <dt className="text-xs text-muted-foreground">{stat.label}</dt>
+              <dd className={stat.text ? "truncate text-sm leading-7 font-medium" : "truncate text-lg font-semibold tabular-nums"}>
+                {stat.value}
+                {stat.extra && <span className="ml-1 text-sm font-normal text-muted-foreground">{stat.extra}</span>}
+              </dd>
+            </div>
+          ))}
+        </dl>
 
-      <div className="user-card-forms">
-        <LimitForm key={`${user.id}-${user.key_limit}`} user={user} onSave={onSaveLimit} />
-        <div className="user-card-form">
-          <span className="form-title">Новый ключ</span>
-          {user.status === "approved" ? (
-            <CreateKeyForm key={user.id} placeholder="Название устройства" submitLabel="Добавить" onCreate={onCreateKey} />
-          ) : (
-            <p className="muted">
-              {user.status === "pending" ? "Сначала подтвердите аккаунт." : "Сначала восстановите аккаунт."}
-            </p>
-          )}
+        <Separator />
+
+        <div className="grid gap-5 sm:grid-cols-[200px_minmax(0,1fr)]">
+          <LimitForm key={`${user.id}-${user.key_limit}`} user={user} onSave={onSaveLimit} />
+          <div className="grid content-start gap-2">
+            <Label>Новый ключ</Label>
+            {user.status === "approved" ? (
+              <CreateKeyForm key={user.id} placeholder="Название устройства" submitLabel="Добавить" onCreate={onCreateKey} />
+            ) : (
+              <p className="text-sm leading-9 text-muted-foreground">
+                {user.status === "pending" ? "Сначала подтвердите аккаунт." : "Сначала восстановите аккаунт."}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
-    </section>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -139,14 +151,12 @@ function LimitForm({ user, onSave }: { user: User; onSave: (value: number) => Pr
   }
 
   return (
-    <form className="user-card-form" onSubmit={submit}>
-      <label className="form-title" htmlFor={`limit-${user.id}`}>
-        Лимит ключей
-      </label>
-      <div className="limit-row">
-        <input
+    <form className="grid content-start gap-2" onSubmit={submit}>
+      <Label htmlFor={`limit-${user.id}`}>Лимит ключей</Label>
+      <div className="flex gap-2">
+        <Input
           id={`limit-${user.id}`}
-          className="limit-input"
+          className="h-9 w-20 max-sm:flex-1"
           type="number"
           inputMode="numeric"
           min={0}
@@ -154,9 +164,9 @@ function LimitForm({ user, onSave }: { user: User; onSave: (value: number) => Pr
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
         />
-        <button className="ghost" disabled={busy || !valid || value === user.key_limit}>
+        <Button variant="outline" size="lg" disabled={busy || !valid || value === user.key_limit}>
           Сохранить
-        </button>
+        </Button>
       </div>
     </form>
   );

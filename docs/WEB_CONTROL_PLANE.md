@@ -123,11 +123,14 @@ server/                     бэкенд на Go
   internal/ratelimit/       ограничение попыток входа
   internal/stats/           сбор трафика и онлайна
   internal/store/           SQLite: схема, миграции, запросы
-  internal/telegram/        клиент Bot API и бот заявок
+  internal/monitor/         проверки цепочки и сервера, тревоги
+  internal/telegram/        клиент Bot API, бот заявок и тревог
   internal/web/             встроенный интерфейс (go:embed) и SPA-fallback
   internal/xray/            правка конфига, API Xray, ссылки vless://
   Makefile                  web / build / test
-frontend/                   интерфейс на React + Vite
+frontend/                   интерфейс: React + Vite, Tailwind CSS и компоненты shadcn/ui
+  src/components/ui/        компоненты shadcn (добавлять: npx shadcn@latest add <имя>)
+  src/index.css             палитра светлой и тёмной темы (CSS-переменные)
 deploy/install_panel.sh     установка и обновление на relay-сервере
 ```
 

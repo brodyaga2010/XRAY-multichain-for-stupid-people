@@ -1,6 +1,9 @@
-import { useMemo, useState } from "react";
-import { CheckStatus, MonitorPoint, MonitorStatus } from "../api";
-import { formatDateTime, formatDuration, formatTime } from "../utils";
+import { PointerEvent as ReactPointerEvent, useMemo, useState } from "react";
+import { CheckStatus, MonitorPoint, MonitorStatus } from "@/api";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+import { formatDateTime, formatDuration, formatTime } from "@/utils";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_INCIDENTS = 5;
@@ -10,6 +13,20 @@ const STATUS_TEXT: Record<CheckStatus, string> = {
   warn: "с перебоями",
   fail: "не работает",
   unknown: "нет данных"
+};
+
+const dotClass: Record<CheckStatus, string> = {
+  ok: "bg-success",
+  warn: "bg-warning",
+  fail: "bg-destructive",
+  unknown: "bg-muted-foreground/40"
+};
+
+const badgeClass: Record<CheckStatus, string> = {
+  ok: "bg-success/12 text-success",
+  warn: "bg-warning/15 text-warning-foreground",
+  fail: "bg-destructive/10 text-destructive",
+  unknown: "bg-muted text-muted-foreground"
 };
 
 function overall(status: MonitorStatus): { tone: CheckStatus; text: string } {
@@ -24,6 +41,10 @@ function seconds(ms: number) {
   return `${(ms / 1000).toFixed(2).replace(".", ",")} с`;
 }
 
+function Dot({ status }: { status: CheckStatus }) {
+  return <span className={cn("mt-1.5 size-2 shrink-0 rounded-full", dotClass[status])} />;
+}
+
 /** Задержка цепочки за сутки: линия по удачным проверкам, красные полосы — проверки без ответа. */
 function LatencyChart({ points, now }: { points: MonitorPoint[]; now: number }) {
   const [hover, setHover] = useState<MonitorPoint | null>(null);
@@ -32,9 +53,7 @@ function LatencyChart({ points, now }: { points: MonitorPoint[]; now: number }) 
   const from = now - DAY_MS;
 
   const { yMax, segments, failures, parsed } = useMemo(() => {
-    const parsed = points
-      .map((point) => ({ point, t: new Date(point.at).getTime() }))
-      .filter(({ t }) => t >= from);
+    const parsed = points.map((point) => ({ point, t: new Date(point.at).getTime() })).filter(({ t }) => t >= from);
     const values = parsed.flatMap(({ point }) => (point.ms != null ? [point.ms] : []));
     const peak = values.length ? Math.max(...values) : 0;
     const yMax = Math.max(1000, Math.ceil(peak / 500) * 500);
@@ -56,7 +75,7 @@ function LatencyChart({ points, now }: { points: MonitorPoint[]; now: number }) 
     return { yMax, segments, failures, parsed };
   }, [points, from]);
 
-  function onMove(event: React.PointerEvent<SVGSVGElement>) {
+  function onMove(event: ReactPointerEvent<SVGSVGElement>) {
     if (!parsed.length) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const t = from + ((event.clientX - rect.left) / rect.width) * DAY_MS;
@@ -68,10 +87,10 @@ function LatencyChart({ points, now }: { points: MonitorPoint[]; now: number }) 
   }
 
   return (
-    <div className="latency-chart">
-      <div className="latency-chart-head">
+    <div className="relative grid gap-1.5">
+      <div className="flex justify-between gap-3 text-xs text-muted-foreground tabular-nums">
         <span>Задержка цепочки за сутки</span>
-        <span className="latency-chart-readout">
+        <span className={cn(hover && "font-medium text-foreground")}>
           {hover
             ? `${formatTime(hover.at)} · ${hover.ms != null && hover.status !== "fail" ? seconds(hover.ms) : "нет ответа"}`
             : `шкала до ${seconds(yMax)}`}
@@ -82,25 +101,47 @@ function LatencyChart({ points, now }: { points: MonitorPoint[]; now: number }) 
         preserveAspectRatio="none"
         role="img"
         aria-label="График задержки цепочки за 24 часа"
+        className="block h-28 w-full touch-pan-y rounded-lg bg-muted/50"
         onPointerMove={onMove}
         onPointerLeave={() => setHover(null)}
       >
         {[0.25, 0.5, 0.75].map((share) => (
-          <line key={share} className="grid" x1={0} x2={width} y1={height * share} y2={height * share} />
+          <line
+            key={share}
+            x1={0}
+            x2={width}
+            y1={height * share}
+            y2={height * share}
+            className="stroke-border"
+            strokeWidth={1}
+            vectorEffect="non-scaling-stroke"
+          />
         ))}
         {failures.map((fx, index) => (
-          <rect key={index} className="failure" x={fx - 2} width={4} y={0} height={height} />
+          <rect key={index} x={fx - 2} width={4} y={0} height={height} className="fill-destructive/40" />
         ))}
         {segments.map((segment, index) => (
-          <polyline key={index} className="line" points={segment} />
+          <polyline
+            key={index}
+            points={segment}
+            fill="none"
+            className="stroke-primary"
+            strokeWidth={1.5}
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
         ))}
       </svg>
-      <div className="latency-chart-axis">
+      <div className="flex justify-between text-xs text-muted-foreground tabular-nums">
         <span>{formatTime(new Date(from))}</span>
         <span>{formatTime(new Date(from + DAY_MS / 2))}</span>
         <span>сейчас</span>
       </div>
-      {parsed.length === 0 && <div className="latency-chart-empty">Данных пока нет — они копятся с запуска панели</div>}
+      {parsed.length === 0 && (
+        <div className="absolute inset-x-0 top-6 bottom-6 grid place-items-center text-center text-sm text-muted-foreground">
+          Данных пока нет — они копятся с запуска кабинета
+        </div>
+      )}
     </div>
   );
 }
@@ -109,12 +150,12 @@ export function HealthPanel({ status }: { status: MonitorStatus | null }) {
   if (!status) return null;
   if (!status.enabled) {
     return (
-      <section className="table-panel health-panel animate-in">
-        <div className="panel-heading">
-          <h2>Состояние VPN</h2>
-          <span>мониторинг выключен</span>
-        </div>
-      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle>Состояние VPN</CardTitle>
+          <CardDescription>Мониторинг выключен</CardDescription>
+        </CardHeader>
+      </Card>
     );
   }
   const summary = overall(status);
@@ -122,48 +163,52 @@ export function HealthPanel({ status }: { status: MonitorStatus | null }) {
   const incidents = status.incidents.slice(0, MAX_INCIDENTS);
 
   return (
-    <section className="table-panel health-panel animate-in">
-      <div className="panel-heading">
-        <h2>Состояние VPN</h2>
-        <div className="panel-heading-side">
-          <span className={`health-badge ${summary.tone}`}>{summary.text}</span>
-          {status.checked_at && <span>проверено в {formatTime(status.checked_at)}</span>}
-        </div>
-      </div>
-      <div className="health-body">
-        <ul className="health-checks">
+    <Card>
+      <CardHeader>
+        <CardTitle>Состояние VPN</CardTitle>
+        {status.checked_at && <CardDescription>Проверено в {formatTime(status.checked_at)}</CardDescription>}
+        <CardAction>
+          <Badge className={cn("border-0", badgeClass[summary.tone])}>{summary.text}</Badge>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="grid items-start gap-6 lg:grid-cols-[5fr_7fr]">
+        <ul className="grid divide-y">
           {status.checks.map((check) => (
-            <li key={check.id} className={`health-check ${check.status}`}>
-              <span className="health-dot" aria-label={STATUS_TEXT[check.status]} title={STATUS_TEXT[check.status]} />
-              <div>
-                <strong>{check.name}</strong>
-                <span>{check.value || STATUS_TEXT[check.status]}</span>
-                {check.detail && check.status !== "ok" && <em>{check.detail}</em>}
+            <li key={check.id} className="flex gap-3 py-2.5 first:pt-0 last:pb-0">
+              <Dot status={check.status} />
+              <div className="grid min-w-0 gap-0.5">
+                <span className="text-sm font-medium">{check.name}</span>
+                <span className="text-sm text-muted-foreground tabular-nums">{check.value || STATUS_TEXT[check.status]}</span>
+                {check.detail && check.status !== "ok" && (
+                  <span className={cn("text-xs break-words", check.status === "fail" ? "text-destructive" : "text-muted-foreground")}>
+                    {check.detail}
+                  </span>
+                )}
               </div>
             </li>
           ))}
         </ul>
-        <div className="health-side">
+        <div className="grid gap-5">
           <LatencyChart points={status.history} now={now} />
-          <div className="health-incidents">
-            <h3>Последние сбои</h3>
+          <div className="grid gap-2">
+            <h3 className="text-sm font-medium">Последние сбои</h3>
             {incidents.length === 0 ? (
-              <div className="empty">Сбоев не было</div>
+              <p className="text-sm text-muted-foreground">Сбоев не было</p>
             ) : (
-              <ul>
+              <ul className="grid divide-y">
                 {incidents.map((incident) => {
                   const start = new Date(incident.started_at).getTime();
                   const end = incident.ended_at ? new Date(incident.ended_at).getTime() : null;
                   return (
-                    <li key={`${incident.check}-${incident.started_at}`} className={incident.status}>
-                      <span className="health-dot" />
-                      <div>
-                        <strong>{incident.name}</strong>
-                        <span>
+                    <li key={`${incident.check}-${incident.started_at}`} className="flex gap-3 py-2 first:pt-0 last:pb-0">
+                      <Dot status={incident.status} />
+                      <div className="grid min-w-0 gap-0.5">
+                        <span className="text-sm font-medium">{incident.name}</span>
+                        <span className="text-xs text-muted-foreground tabular-nums">
                           {formatDateTime(incident.started_at)}
                           {end ? ` – ${formatTime(incident.ended_at!)} · ${formatDuration(end - start)}` : " · идёт сейчас"}
                         </span>
-                        {incident.detail && <em>{incident.detail}</em>}
+                        {incident.detail && <span className="text-xs break-words text-muted-foreground">{incident.detail}</span>}
                       </div>
                     </li>
                   );
@@ -172,7 +217,7 @@ export function HealthPanel({ status }: { status: MonitorStatus | null }) {
             )}
           </div>
         </div>
-      </div>
-    </section>
+      </CardContent>
+    </Card>
   );
 }

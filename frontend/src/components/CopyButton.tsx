@@ -1,16 +1,13 @@
 import { Check, Copy } from "lucide-react";
-import { useState } from "react";
-import { copyText } from "../utils";
+import { ComponentProps, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { copyText } from "@/utils";
 
 export function CopyButton({
   text,
   label = "Копировать",
-  className = "small ghost"
-}: {
-  text: string;
-  label?: string;
-  className?: string;
-}) {
+  ...props
+}: { text: string; label?: string } & Omit<ComponentProps<typeof Button>, "onClick" | "children">) {
   const [done, setDone] = useState(false);
 
   async function copy() {
@@ -24,9 +21,9 @@ export function CopyButton({
   }
 
   return (
-    <button type="button" className={className} onClick={copy} disabled={!text}>
-      {done ? <Check size={16} /> : <Copy size={16} />}
-      <span>{done ? "Скопировано" : label}</span>
-    </button>
+    <Button type="button" onClick={copy} disabled={!text} {...props}>
+      {done ? <Check /> : <Copy />}
+      {done ? "Скопировано" : label}
+    </Button>
   );
 }

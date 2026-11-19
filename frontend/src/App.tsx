@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { api, User } from "./api";
-import { AuthScreen } from "./components/AuthScreen";
-import { PendingScreen } from "./components/PendingScreen";
-import { Shell } from "./components/Shell";
+import { api, User } from "@/api";
+import { AuthScreen } from "@/components/AuthScreen";
+import { PendingScreen } from "@/components/PendingScreen";
+import { Shell } from "@/components/Shell";
 
 export function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -16,7 +16,7 @@ export function App() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="boot">Загрузка...</div>;
+  if (loading) return <div className="grid min-h-dvh place-items-center text-sm text-muted-foreground">Загрузка...</div>;
   if (!user) return <AuthScreen onAuthed={setUser} />;
   if (user.status !== "approved") return <PendingScreen user={user} onLogout={() => logout(setUser)} />;
 

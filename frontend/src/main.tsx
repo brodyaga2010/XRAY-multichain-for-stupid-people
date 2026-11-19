@@ -1,8 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { App } from "./App";
-import "./styles.css";
-import { PAGE_TITLE } from "./brand";
+import "./index.css";
+import { PAGE_TITLE } from "@/brand";
 
 document.title = PAGE_TITLE;
 

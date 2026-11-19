@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import { CheckStatus, VpnStatus } from "../api";
-import { formatTime } from "../utils";
+import { CheckStatus, VpnStatus } from "@/api";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { formatTime } from "@/utils";
 
 const TEXT: Record<Exclude<CheckStatus, "unknown">, { short: string; title: string; hint: string }> = {
   ok: { short: "", title: "VPN работает", hint: "Подключение проверяется каждую минуту." },
@@ -12,76 +14,66 @@ const TEXT: Record<Exclude<CheckStatus, "unknown">, { short: string; title: stri
   fail: { short: "Сбой", title: "Сбой VPN", hint: "Подключение сейчас может не работать. Мы уже знаем и чиним." }
 };
 
+const dot: Record<Exclude<CheckStatus, "unknown">, string> = {
+  ok: "bg-success ring-success/20",
+  warn: "bg-warning ring-warning/25",
+  fail: "bg-destructive ring-destructive/20"
+};
+
+const pill: Record<Exclude<CheckStatus, "unknown">, string> = {
+  ok: "",
+  warn: "border-warning/40 bg-warning/10 text-warning-foreground hover:bg-warning/15",
+  fail: "border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15"
+};
+
 /** Компактный статус VPN в шапке: точка и отклик, по нажатию — подробности. */
 export function VpnStatusPill({ status, onDetails }: { status: VpnStatus | null; onDetails?: () => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointer = (event: PointerEvent) => {
-      if (!ref.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setOpen(false);
-    document.addEventListener("pointerdown", onPointer);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onPointer);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
   if (!status || status.status === "unknown") return null;
-  const text = TEXT[status.status];
+  const tone = status.status;
+  const text = TEXT[tone];
   const latency = status.latency_ms != null ? `${Math.round(status.latency_ms)} мс` : null;
-  const label = text.short || latency || "VPN";
 
   return (
-    <div className="vpn-pill-wrap" ref={ref}>
-      <button
-        type="button"
-        className={`vpn-pill ${status.status}`}
-        aria-expanded={open}
-        aria-label={`${text.title}${latency ? `, отклик ${latency}` : ""}`}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <i />
-        <span>{label}</span>
-      </button>
-      {open && (
-        <div className={`vpn-popover ${status.status}`} role="dialog" aria-label="Состояние VPN">
-          <strong>
-            <i /> {text.title}
-          </strong>
-          <p>{text.hint}</p>
-          <dl>
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className={cn("h-8 rounded-full px-3 tabular-nums", pill[tone])}
+          aria-label={`${text.title}${latency ? `, отклик ${latency}` : ""}`}
+        >
+          <span className={cn("size-2 rounded-full ring-3", dot[tone])} />
+          {text.short || latency || "VPN"}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-72">
+        <div className="grid gap-3">
+          <div className="flex items-center gap-2 font-medium">
+            <span className={cn("size-2 rounded-full ring-3", dot[tone])} />
+            {text.title}
+          </div>
+          <p className="text-sm text-muted-foreground">{text.hint}</p>
+          <dl className="flex gap-6 text-sm">
             {latency && (
               <div>
-                <dt>Отклик</dt>
-                <dd>{latency}</dd>
+                <dt className="text-xs text-muted-foreground">Отклик</dt>
+                <dd className="font-semibold tabular-nums">{latency}</dd>
               </div>
             )}
             {status.checked_at && (
               <div>
-                <dt>Проверено</dt>
-                <dd>{formatTime(status.checked_at)}</dd>
+                <dt className="text-xs text-muted-foreground">Проверено</dt>
+                <dd className="font-semibold tabular-nums">{formatTime(status.checked_at)}</dd>
               </div>
             )}
           </dl>
           {onDetails && (
-            <button
-              type="button"
-              className="link-button"
-              onClick={() => {
-                setOpen(false);
-                onDetails();
-              }}
-            >
+            <Button variant="link" className="h-auto justify-self-start p-0" onClick={onDetails}>
               Подробнее на «Обзоре»
-            </button>
+            </Button>
           )}
         </div>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 }

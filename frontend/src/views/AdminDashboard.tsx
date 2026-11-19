@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, ArrowUpDown, Clock3, KeyRound, ShieldAlert, Users, Wifi } from "lucide-react";
-import { api, MonitorStatus, User, VpnKey } from "../api";
-import { HealthPanel } from "../components/HealthPanel";
-import { StatCard } from "../components/StatCard";
-import { Status } from "../components/Status";
-import { useAutoRefresh } from "../hooks";
-import { AppView } from "../types";
-import { formatBytes, formatDate, keyTitle } from "../utils";
+import { ArrowUpDown, Clock3, KeyRound, ShieldAlert, Users, Wifi } from "lucide-react";
+import { api, MonitorStatus, User, VpnKey } from "@/api";
+import { HealthPanel } from "@/components/HealthPanel";
+import { StatCard } from "@/components/StatCard";
+import { StatusBadge } from "@/components/StatusBadge";
+import { UserAvatar } from "@/components/UserAvatar";
+import { Button } from "@/components/ui/button";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAutoRefresh } from "@/hooks";
+import { AppView } from "@/types";
+import { formatBytes, formatDate, keyTitle } from "@/utils";
 
 export function AdminDashboard({
   setError,
@@ -65,8 +68,8 @@ export function AdminDashboard({
     .slice(0, 6);
 
   return (
-    <div className="dashboard-grid">
-      <div className="metrics-strip dashboard-metrics">
+    <div className="grid gap-4 md:gap-6">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3">
         <StatCard label="Активные ключи" value={stats.activeKeys} helper="Выданы и работают" icon={KeyRound} tone="good" />
         <StatCard label="Сейчас в сети" value={stats.onlineKeys} helper="Ключей онлайн" icon={Wifi} tone="good" />
         <StatCard label="Трафик всего" value={formatBytes(stats.totalTraffic)} helper="Загрузка + отдача" icon={ArrowUpDown} />
@@ -77,80 +80,96 @@ export function AdminDashboard({
 
       <HealthPanel status={health} />
 
-      <section className="table-panel animate-in">
-        <div className="panel-heading">
-          <h2>Ждут подтверждения</h2>
-          <span>ожидают: {stats.pendingUsers}</span>
-        </div>
-        <div className="activity-list">
-          {pendingUsers.length > 0 ? (
-            pendingUsers.map((user) => (
-              <div className="activity-row" key={user.id}>
-                <Clock3 size={17} />
-                <div>
-                  <strong className="ellipsis" title={user.email}>
-                    {user.email}
-                  </strong>
-                  <span>Запрос доступа: {formatDate(user.created_at)}</span>
-                </div>
-                <button className="small" disabled={approving === user.id} onClick={() => approve(user.id)}>
-                  Подтвердить
-                </button>
-              </div>
-            ))
-          ) : (
-            <div className="empty">Нет заявок на подтверждение</div>
+      <div className="grid items-start gap-4 md:gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Ждут подтверждения</CardTitle>
+            <CardDescription>ожидают: {stats.pendingUsers}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {pendingUsers.length > 0 ? (
+              <ul className="grid divide-y">
+                {pendingUsers.map((user) => (
+                  <li key={user.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                    <UserAvatar email={user.email} />
+                    <div className="grid min-w-0 flex-1">
+                      <span className="truncate text-sm font-medium" title={user.email}>
+                        {user.email}
+                      </span>
+                      <span className="text-xs text-muted-foreground">Запрос: {formatDate(user.created_at)}</span>
+                    </div>
+                    <Button disabled={approving === user.id} onClick={() => approve(user.id)}>
+                      Подтвердить
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="py-6 text-center text-sm text-muted-foreground">Нет заявок на подтверждение</p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Новые пользователи</CardTitle>
+            <CardDescription>всего: {users.length}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="grid divide-y">
+              {recentUsers.map((user) => (
+                <li key={user.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                  <UserAvatar email={user.email} />
+                  <div className="grid min-w-0 flex-1">
+                    <span className="truncate text-sm font-medium" title={user.email}>
+                      {user.email}
+                    </span>
+                    <span className="text-xs text-muted-foreground">Регистрация: {formatDate(user.created_at)}</span>
+                  </div>
+                  <StatusBadge status={user.status} kind="user" />
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Последние ключи</CardTitle>
+          <CardDescription>всего: {keys.length}</CardDescription>
+          {keys.length > 0 && (
+            <CardAction>
+              <Button variant="outline" onClick={() => onNavigate("keys")}>
+                Все ключи
+              </Button>
+            </CardAction>
           )}
-        </div>
-      </section>
-      <section className="table-panel animate-in">
-        <div className="panel-heading">
-          <h2>Новые пользователи</h2>
-          <span>всего: {users.length}</span>
-        </div>
-        <div className="activity-list">
-          {recentUsers.map((user) => (
-            <div className="activity-row" key={user.id}>
-              <Activity size={17} />
-              <div>
-                <strong className="ellipsis" title={user.email}>
-                  {user.email}
-                </strong>
-                <span>Регистрация: {formatDate(user.created_at)}</span>
-                <Status status={user.status} kind="user" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-      <section className="table-panel dashboard-keys animate-in">
-        <div className="panel-heading">
-          <h2>Последние ключи</h2>
-          <span>всего: {keys.length}</span>
-        </div>
-        <div className="activity-list">
-          {recentKeys.map((key) => (
-            <div className="activity-row" key={key.id}>
-              <KeyRound size={17} />
-              <div>
-                <strong className="ellipsis" title={keyTitle(key)}>
-                  {keyTitle(key)}
-                </strong>
-                <span className="ellipsis" title={key.owner_email ?? undefined}>
-                  {key.owner_email ?? "—"} / {formatDate(key.created_at)}
-                </span>
-              </div>
-              <Status status={key.status} />
-            </div>
-          ))}
-          {recentKeys.length === 0 && <div className="empty">Ключей пока нет</div>}
-        </div>
-        {keys.length > 0 && (
-          <button type="button" className="link-button" onClick={() => onNavigate("keys")}>
-            Все ключи
-          </button>
-        )}
-      </section>
+        </CardHeader>
+        <CardContent>
+          {recentKeys.length > 0 ? (
+            <ul className="grid divide-y">
+              {recentKeys.map((key) => (
+                <li key={key.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                    <KeyRound className="size-4" />
+                  </span>
+                  <div className="grid min-w-0 flex-1">
+                    <span className="truncate text-sm font-medium" title={keyTitle(key)}>
+                      {keyTitle(key)}
+                    </span>
+                    <span className="truncate text-xs text-muted-foreground" title={key.owner_email ?? undefined}>
+                      {key.owner_email ?? "—"} · {formatDate(key.created_at)}
+                    </span>
+                  </div>
+                  <StatusBadge status={key.status} />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="py-6 text-center text-sm text-muted-foreground">Ключей пока нет</p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
