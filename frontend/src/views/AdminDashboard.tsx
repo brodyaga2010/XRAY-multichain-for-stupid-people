@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpDown, Clock3, KeyRound, ShieldAlert, Users, Wifi } from "lucide-react";
+import { Activity, ArrowUpDown, Check, Clock3, KeyRound, Users, Wifi } from "lucide-react";
 import { api, MonitorStatus, User, VpnKey } from "@/api";
-import { HealthPanel } from "@/components/HealthPanel";
-import { StatCard } from "@/components/StatCard";
+import { overall } from "@/components/HealthPanel";
+import { Stat, StatStrip } from "@/components/StatStrip";
 import { StatusBadge } from "@/components/StatusBadge";
 import { UserAvatar } from "@/components/UserAvatar";
 import { Button } from "@/components/ui/button";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAutoRefresh } from "@/hooks";
 import { AppView } from "@/types";
 import { formatBytes, formatDate, keyTitle } from "@/utils";
@@ -55,101 +55,101 @@ export function AdminDashboard({
     const activeKeys = keys.filter((key) => key.status === "active").length;
     const pendingUsers = users.filter((user) => user.status === "pending").length;
     const suspendedUsers = users.filter((user) => user.status === "suspended").length;
-    const totalCapacity = users.reduce((sum, user) => sum + user.key_limit, 0);
     const onlineKeys = keys.filter((key) => key.online).length;
     const totalTraffic = keys.reduce((sum, key) => sum + key.traffic_up + key.traffic_down, 0);
-    return { activeKeys, pendingUsers, suspendedUsers, totalCapacity, onlineKeys, totalTraffic };
+    return { activeKeys, pendingUsers, suspendedUsers, onlineKeys, totalTraffic };
   }, [users, keys]);
 
-  const recentUsers = users.slice(0, 5);
-  const pendingUsers = users.filter((user) => user.status === "pending").slice(0, 5);
-  const recentKeys = [...keys]
-    .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
-    .slice(0, 6);
+  // Сначала заявки (их можно подтвердить прямо здесь), остальное место — новые пользователи.
+  const byNewest = [...users].sort((left, right) => right.created_at.localeCompare(left.created_at));
+  const shownUsers = [
+    ...byNewest.filter((user) => user.status === "pending"),
+    ...byNewest.filter((user) => user.status !== "pending")
+  ].slice(0, 5);
+  // Подробности состояния — на отдельной вкладке; здесь только итог одной ячейкой.
+  const vpn: Stat = (() => {
+    const base = { label: "Состояние VPN", icon: Activity, onClick: () => onNavigate("status") };
+    if (!health || !health.enabled) return { ...base, value: "—" };
+    const { tone } = overall(health);
+    const short = { ok: "Работает", warn: "Перебои", fail: "Сбой", unknown: "Проверка…" }[tone];
+    const toneMap = { ok: "good", warn: "warn", fail: "danger", unknown: "neutral" } as const;
+    return { ...base, value: short, tone: toneMap[tone] };
+  })();
+  const recentKeys = [...keys].sort((left, right) => right.created_at.localeCompare(left.created_at)).slice(0, 5);
 
   return (
     <div className="grid gap-4 md:gap-6">
-      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3">
-        <StatCard label="Активные ключи" value={stats.activeKeys} helper="Выданы и работают" icon={KeyRound} tone="good" />
-        <StatCard label="Сейчас в сети" value={stats.onlineKeys} helper="Ключей онлайн" icon={Wifi} tone="good" />
-        <StatCard label="Трафик всего" value={formatBytes(stats.totalTraffic)} helper="Загрузка + отдача" icon={ArrowUpDown} />
-        <StatCard label="Ждут подтверждения" value={stats.pendingUsers} helper="Новые пользователи" icon={Clock3} tone="warn" />
-        <StatCard label="Заблокированы" value={stats.suspendedUsers} helper="Доступ приостановлен" icon={ShieldAlert} tone="danger" />
-        <StatCard label="Лимит ключей" value={stats.totalCapacity} helper="Сумма лимитов" icon={Users} />
-      </div>
-
-      <HealthPanel status={health} />
+      <StatStrip
+        items={[
+          vpn,
+          { label: "Активные ключи", value: stats.activeKeys, icon: KeyRound, tone: "good", onClick: () => onNavigate("keys") },
+          { label: "Сейчас в сети", value: stats.onlineKeys, icon: Wifi, tone: "good", onClick: () => onNavigate("keys") },
+          { label: "Трафик всего", value: formatBytes(stats.totalTraffic), icon: ArrowUpDown },
+          { label: "Заявки", value: stats.pendingUsers, icon: Clock3, tone: "warn", onClick: () => onNavigate("admin") },
+          { label: "Пользователей", value: users.length, icon: Users, onClick: () => onNavigate("admin") }
+        ]}
+      />
 
       <div className="grid items-start gap-4 md:gap-6 lg:grid-cols-2">
-        <Card>
+        <Card className="gap-3">
           <CardHeader>
-            <CardTitle>Ждут подтверждения</CardTitle>
-            <CardDescription>ожидают: {stats.pendingUsers}</CardDescription>
+            <CardTitle>Пользователи</CardTitle>
+            <CardAction>
+              <Button variant="ghost" className="-my-1.5 text-muted-foreground" onClick={() => onNavigate("admin")}>
+                Все
+              </Button>
+            </CardAction>
           </CardHeader>
           <CardContent>
-            {pendingUsers.length > 0 ? (
+            {shownUsers.length > 0 ? (
               <ul className="grid divide-y">
-                {pendingUsers.map((user) => (
-                  <li key={user.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                {shownUsers.map((user) => (
+                  <li key={user.id} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
                     <UserAvatar email={user.email} />
                     <div className="grid min-w-0 flex-1">
                       <span className="truncate text-sm font-medium" title={user.email}>
                         {user.email}
                       </span>
-                      <span className="text-xs text-muted-foreground">Запрос: {formatDate(user.created_at)}</span>
+                      <span className="text-xs text-muted-foreground">с {formatDate(user.created_at)}</span>
                     </div>
-                    <Button disabled={approving === user.id} onClick={() => approve(user.id)}>
-                      Подтвердить
-                    </Button>
+                    {/* У заявки на узком экране хватает кнопки ✓ — длинная плашка съедала бы почту. */}
+                    <StatusBadge status={user.status} kind="user" className={user.status === "pending" ? "max-sm:hidden" : undefined} />
+                    {user.status === "pending" && (
+                      <Button
+                        size="icon-sm"
+                        variant="outline"
+                        className="text-success hover:bg-success/10 hover:text-success"
+                        disabled={approving === user.id}
+                        onClick={() => approve(user.id)}
+                        aria-label={`Подтвердить ${user.email}`}
+                        title="Подтвердить"
+                      >
+                        <Check />
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="py-6 text-center text-sm text-muted-foreground">Нет заявок на подтверждение</p>
+              <p className="py-6 text-center text-sm text-muted-foreground">Пользователей пока нет</p>
             )}
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Новые пользователи</CardTitle>
-            <CardDescription>всего: {users.length}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="grid divide-y">
-              {recentUsers.map((user) => (
-                <li key={user.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                  <UserAvatar email={user.email} />
-                  <div className="grid min-w-0 flex-1">
-                    <span className="truncate text-sm font-medium" title={user.email}>
-                      {user.email}
-                    </span>
-                    <span className="text-xs text-muted-foreground">Регистрация: {formatDate(user.created_at)}</span>
-                  </div>
-                  <StatusBadge status={user.status} kind="user" />
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      </div>
 
-      <Card>
+      <Card className="gap-3">
         <CardHeader>
           <CardTitle>Последние ключи</CardTitle>
-          <CardDescription>всего: {keys.length}</CardDescription>
-          {keys.length > 0 && (
-            <CardAction>
-              <Button variant="outline" onClick={() => onNavigate("keys")}>
-                Все ключи
-              </Button>
-            </CardAction>
-          )}
+          <CardAction>
+            <Button variant="ghost" className="-my-1.5 text-muted-foreground" onClick={() => onNavigate("keys")}>
+              Все
+            </Button>
+          </CardAction>
         </CardHeader>
         <CardContent>
           {recentKeys.length > 0 ? (
             <ul className="grid divide-y">
               {recentKeys.map((key) => (
-                <li key={key.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                <li key={key.id} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
                   <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
                     <KeyRound className="size-4" />
                   </span>
@@ -170,6 +170,7 @@ export function AdminDashboard({
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

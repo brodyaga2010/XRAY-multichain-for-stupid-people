@@ -69,7 +69,7 @@ export function VpnStatusPill({ status, onDetails }: { status: VpnStatus | null;
           </dl>
           {onDetails && (
             <Button variant="link" className="h-auto justify-self-start p-0" onClick={onDetails}>
-              Подробнее на «Обзоре»
+              Подробнее о состоянии
             </Button>
           )}
         </div>

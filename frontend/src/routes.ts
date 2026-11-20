@@ -3,13 +3,14 @@ import { AppView } from "./types";
 // Раздел кабинета хранится в адресе: перезагрузка и кнопка «Назад» оставляют пользователя там же.
 const viewPaths: Record<AppView, string> = {
   dashboard: "/",
+  status: "/status",
   admin: "/users",
   keys: "/keys",
   audit: "/audit",
   profile: "/profile"
 };
 
-const adminViews: AppView[] = ["dashboard", "admin", "keys", "audit", "profile"];
+const adminViews: AppView[] = ["dashboard", "status", "admin", "keys", "audit", "profile"];
 const userViews: AppView[] = ["keys", "profile"];
 
 export function defaultView(isAdmin: boolean): AppView {

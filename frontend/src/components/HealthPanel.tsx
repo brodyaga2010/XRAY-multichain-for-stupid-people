@@ -29,7 +29,8 @@ const badgeClass: Record<CheckStatus, string> = {
   unknown: "bg-muted text-muted-foreground"
 };
 
-function overall(status: MonitorStatus): { tone: CheckStatus; text: string } {
+/** Общий итог проверок: tone для цвета, text — подпись. */
+export function overall(status: MonitorStatus): { tone: CheckStatus; text: string } {
   const statuses = status.checks.map((check) => check.status);
   if (!status.checked_at) return { tone: "unknown", text: "Первая проверка ещё идёт" };
   if (statuses.includes("fail")) return { tone: "fail", text: "Есть сбой" };
@@ -101,7 +102,7 @@ function LatencyChart({ points, now }: { points: MonitorPoint[]; now: number }) 
         preserveAspectRatio="none"
         role="img"
         aria-label="График задержки цепочки за 24 часа"
-        className="block h-28 w-full touch-pan-y rounded-lg bg-muted/50"
+        className="block h-24 w-full touch-pan-y rounded-lg bg-muted/50"
         onPointerMove={onMove}
         onPointerLeave={() => setHover(null)}
       >
@@ -163,10 +164,14 @@ export function HealthPanel({ status }: { status: MonitorStatus | null }) {
   const incidents = status.incidents.slice(0, MAX_INCIDENTS);
 
   return (
-    <Card>
+    <Card className="gap-4">
       <CardHeader>
-        <CardTitle>Состояние VPN</CardTitle>
-        {status.checked_at && <CardDescription>Проверено в {formatTime(status.checked_at)}</CardDescription>}
+        <CardTitle className="flex items-baseline gap-2">
+          Проверки
+          {status.checked_at && (
+            <span className="text-xs font-normal text-muted-foreground tabular-nums">проверено в {formatTime(status.checked_at)}</span>
+          )}
+        </CardTitle>
         <CardAction>
           <Badge className={cn("border-0", badgeClass[summary.tone])}>{summary.text}</Badge>
         </CardAction>
@@ -174,11 +179,15 @@ export function HealthPanel({ status }: { status: MonitorStatus | null }) {
       <CardContent className="grid items-start gap-6 lg:grid-cols-[5fr_7fr]">
         <ul className="grid divide-y">
           {status.checks.map((check) => (
-            <li key={check.id} className="flex gap-3 py-2.5 first:pt-0 last:pb-0">
+            <li key={check.id} className="flex gap-2.5 py-2 first:pt-0 last:pb-0">
               <Dot status={check.status} />
-              <div className="grid min-w-0 gap-0.5">
-                <span className="text-sm font-medium">{check.name}</span>
-                <span className="text-sm text-muted-foreground tabular-nums">{check.value || STATUS_TEXT[check.status]}</span>
+              <div className="grid min-w-0 flex-1 gap-0.5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="truncate text-sm font-medium" title={check.name}>
+                    {check.name}
+                  </span>
+                  <span className="shrink-0 text-sm text-muted-foreground tabular-nums">{check.value || STATUS_TEXT[check.status]}</span>
+                </div>
                 {check.detail && check.status !== "ok" && (
                   <span className={cn("text-xs break-words", check.status === "fail" ? "text-destructive" : "text-muted-foreground")}>
                     {check.detail}
@@ -188,7 +197,7 @@ export function HealthPanel({ status }: { status: MonitorStatus | null }) {
             </li>
           ))}
         </ul>
-        <div className="grid gap-5">
+        <div className="grid gap-4">
           <LatencyChart points={status.history} now={now} />
           <div className="grid gap-2">
             <h3 className="text-sm font-medium">Последние сбои</h3>

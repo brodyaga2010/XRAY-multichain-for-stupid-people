@@ -1,4 +1,4 @@
-import { BarChart3, KeyRound, LogOut, PanelLeftClose, PanelLeftOpen, ScrollText, ShieldCheck, UserCog, Users } from "lucide-react";
+import { Activity, BarChart3, KeyRound, LogOut, PanelLeftClose, PanelLeftOpen, ScrollText, ShieldCheck, UserCog, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api, User, VpnStatus } from "@/api";
 import { SITE_NAME } from "@/brand";
@@ -19,6 +19,7 @@ import { AppView } from "@/types";
 import { AdminDashboard } from "@/views/AdminDashboard";
 import { AdminUsers } from "@/views/AdminUsers";
 import { AuditLog } from "@/views/AuditLog";
+import { VpnHealth } from "@/views/VpnHealth";
 import { Profile } from "@/views/Profile";
 import { UserKeys } from "@/views/UserKeys";
 import { ThemeToggle } from "./ThemeToggle";
@@ -31,6 +32,7 @@ const userNav = [
 ];
 const adminNav = [
   { id: "dashboard" as const, label: "Обзор", icon: BarChart3 },
+  { id: "status" as const, label: "Состояние", short: "VPN", icon: Activity },
   { id: "admin" as const, label: "Пользователи", short: "Люди", icon: Users },
   { id: "keys" as const, label: "Ключи", icon: KeyRound },
   { id: "audit" as const, label: "Журнал", icon: ScrollText },
@@ -39,6 +41,7 @@ const adminNav = [
 
 const titles: Record<AppView, string> = {
   dashboard: "Обзор",
+  status: "Состояние VPN",
   admin: "Пользователи",
   keys: "Ключи",
   audit: "Журнал",
@@ -161,7 +164,7 @@ export function Shell({ user, onUserChange }: { user: User; onUserChange: (user:
           <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-2 px-4 md:px-6">
             <h1 className="truncate text-lg font-semibold">{titles[view]}</h1>
             <div className="ml-auto flex items-center gap-1.5">
-              <VpnStatusPill status={vpnStatus} onDetails={isAdmin ? () => selectView("dashboard") : undefined} />
+              <VpnStatusPill status={vpnStatus} onDetails={isAdmin ? () => selectView("status") : undefined} />
               <ThemeToggle />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -199,6 +202,7 @@ export function Shell({ user, onUserChange }: { user: User; onUserChange: (user:
           )}
           {view === "dashboard" && isAdmin && <AdminDashboard setError={setError} onNavigate={selectView} />}
           {view === "admin" && isAdmin && <AdminUsers currentUser={user} setError={setError} />}
+          {view === "status" && isAdmin && <VpnHealth setError={setError} />}
           {view === "audit" && isAdmin && <AuditLog setError={setError} />}
           {view === "profile" && <Profile user={user} onLogout={logout} />}
           {view === "keys" && <UserKeys user={user} isAdmin={isAdmin} setError={setError} />}
