@@ -6,6 +6,7 @@ import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/componen
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { formatDate, keyTitle, shortUuid } from "@/utils";
+import { useConfirm } from "./ConfirmDialog";
 import { FilterChips } from "./FilterChips";
 import { OnlineIndicator, Traffic } from "./KeyActivity";
 import { KeyModal } from "./KeyModal";
@@ -62,6 +63,7 @@ export function KeyTable({
   cardsOnly?: boolean;
 }) {
   const [filter, setFilter] = useState<KeyFilter>("all");
+  const confirm = useConfirm();
   const [showRevoked, setShowRevoked] = useState(false);
   const [openKeyId, setOpenKeyId] = useState<number | null>(null);
 
@@ -82,8 +84,14 @@ export function KeyTable({
   // Пользователю фильтр нужен, только если в списке есть ключи с разными статусами.
   const showChips = collapseRevoked ? new Set(baseKeys.map((key) => key.status)).size > 1 : keys.length > 0;
 
-  function confirmRevoke(key: VpnKey) {
-    if (window.confirm(`Отозвать ключ «${keyTitle(key)}»?`)) void onRevoke(key.id);
+  async function confirmRevoke(key: VpnKey) {
+    const ok = await confirm({
+      title: `Отозвать ключ «${keyTitle(key)}»?`,
+      description: "Ключ перестанет работать навсегда, вернуть его нельзя — только создать новый.",
+      action: "Отозвать",
+      destructive: true
+    });
+    if (ok) void onRevoke(key.id);
   }
 
   const status = (key: VpnKey) =>

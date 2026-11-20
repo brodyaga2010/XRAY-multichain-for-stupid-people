@@ -4,10 +4,12 @@ import { api } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { useConfirm } from "./ConfirmDialog";
 import { CopyButton } from "./CopyButton";
 import { QrImage } from "./QrImage";
 
 export function SubscriptionPanel({ setError, className }: { setError: (error: string) => void; className?: string }) {
+  const confirm = useConfirm();
   const [url, setUrl] = useState("");
   const [showQr, setShowQr] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -27,8 +29,14 @@ export function SubscriptionPanel({ setError, className }: { setError: (error: s
     void run(api.subscription);
   }, []);
 
-  function rotate() {
-    if (!window.confirm("Старая ссылка-подписка перестанет работать. Перевыпустить?")) return;
+  async function rotate() {
+    const ok = await confirm({
+      title: "Перевыпустить ссылку-подписку?",
+      description: "Старая ссылка перестанет работать — в приложениях нужно будет добавить новую.",
+      action: "Перевыпустить",
+      destructive: true
+    });
+    if (!ok) return;
     setError("");
     void run(api.rotateSubscription);
   }
