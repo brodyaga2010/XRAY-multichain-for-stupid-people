@@ -8,7 +8,7 @@ import { SearchBox } from "@/components/SearchBox";
 import { StatusBadge } from "@/components/StatusBadge";
 import { UserAvatar } from "@/components/UserAvatar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { UserCard } from "@/components/UserCard";
@@ -60,10 +60,11 @@ export function AdminUsers({
   const [newKeyId, setNewKeyId] = useState<number | null>(null);
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [showSuspended, setShowSuspended] = useState(false);
   const isMobile = useMediaQuery("(max-width: 900px)");
   const confirm = useConfirm();
 
-  const filteredUsers = useMemo(
+  const matchingUsers = useMemo(
     () =>
       users.filter(
         (user) =>
@@ -71,6 +72,12 @@ export function AdminUsers({
           matchesSearch([user.email, user.status, user.role, user.key_limit], query)
       ),
     [users, query, filter]
+  );
+  // В «Все» заблокированные спрятаны под ссылкой, чтобы не мешали; во вкладке «Заблокированы» видны всегда.
+  const suspendedCount = filter === "all" ? matchingUsers.filter((user) => user.status === "suspended").length : 0;
+  const filteredUsers = useMemo(
+    () => (filter === "all" && !showSuspended ? matchingUsers.filter((user) => user.status !== "suspended") : matchingUsers),
+    [matchingUsers, filter, showSuspended]
   );
 
   // Выбор действует только на видимых: сменили фильтр или поиск — скрытые снимаются.
@@ -109,7 +116,7 @@ export function AdminUsers({
       const match = current ? loaded.find((item) => item.id === current.id) ?? null : null;
       if (match) return match;
       if (isMobile) return null;
-      return loaded[0] ?? null;
+      return loaded.find((item) => item.status !== "suspended") ?? loaded[0] ?? null;
     });
   }
 
@@ -208,7 +215,7 @@ export function AdminUsers({
         <Card className="min-w-0 gap-3 min-[901px]:sticky min-[901px]:top-20">
           <CardHeader>
             <CardTitle>Пользователи</CardTitle>
-            <CardDescription>показано: {filteredUsers.length}</CardDescription>
+            <CardAction className="self-center text-sm text-muted-foreground">показано: {filteredUsers.length}</CardAction>
           </CardHeader>
           <CardContent className="grid gap-3">
             <SearchBox value={query} onChange={setQuery} placeholder="Почта, статус, роль" />
@@ -332,6 +339,15 @@ export function AdminUsers({
                 <li className="py-6 text-center text-sm text-muted-foreground">Пользователи не найдены</li>
               )}
             </ul>
+            {suspendedCount > 0 && (
+              <Button
+                variant="link"
+                className="h-auto justify-self-start p-0 text-muted-foreground"
+                onClick={() => setShowSuspended((current) => !current)}
+              >
+                {showSuspended ? "Скрыть заблокированных" : `Показать заблокированных (${suspendedCount})`}
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}
