@@ -88,11 +88,12 @@ export function UserKeys({
         keys={filteredKeys}
         showOwner
         onRevoke={revoke}
+        showHeader={false}
         headerExtra={
           <Button variant="outline" disabled={busy} onClick={importKeys} title="Импортировать ключи с сервера">
             <Download />
-            <span className="max-sm:hidden">Импортировать с сервера</span>
-            <span className="sm:hidden">Импорт</span>
+            <span className="max-xl:hidden">Импортировать с сервера</span>
+            <span className="xl:hidden">Импорт</span>
           </Button>
         }
         beforeList={importResult && <p className="text-sm text-muted-foreground">{importResult}</p>}
@@ -128,7 +129,6 @@ export function UserKeys({
           )
         }
         onRevoke={revoke}
-        showCount={false}
         collapseRevoked
         autoOpenKeyId={newKeyId}
         empty={loaded && keys.length === 0 ? emptyState : undefined}

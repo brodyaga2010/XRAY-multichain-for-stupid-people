@@ -10,7 +10,8 @@ export function FilterChips<T extends string>({
   compact = false,
   className
 }: {
-  options: Array<{ id: T; label: string }>;
+  /** count — сколько записей в этой группе, показывается рядом с названием. */
+  options: Array<{ id: T; label: string; count?: number }>;
   value: T;
   onChange: (value: T) => void;
   label?: string;
@@ -22,8 +23,11 @@ export function FilterChips<T extends string>({
     <Tabs value={value} onValueChange={(next) => onChange(next as T)} className={cn("min-w-0", className)}>
       <TabsList aria-label={label} className={cn("h-9 w-full max-w-full scrollbar-none overflow-x-auto", !compact && "sm:w-fit")}>
         {options.map((item) => (
-          <TabsTrigger key={item.id} value={item.id} className={compact ? "px-1 text-xs" : "px-1.5 text-xs sm:px-3 sm:text-sm"}>
+          <TabsTrigger key={item.id} value={item.id} className={compact ? "px-1 text-xs" : "gap-1 px-0.5 text-xs sm:gap-1.5 sm:px-3 sm:text-sm"}>
             {item.label}
+            {item.count !== undefined && (
+              <span className="tabular-nums opacity-55">{item.count}</span>
+            )}
           </TabsTrigger>
         ))}
       </TabsList>

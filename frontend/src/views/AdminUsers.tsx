@@ -10,7 +10,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { UserAvatar } from "@/components/UserAvatar";
 import { UserCard } from "@/components/UserCard";
 import { Button } from "@/components/ui/button";
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -111,15 +111,22 @@ export function AdminUsers({
   const confirm = useConfirm();
 
   const rows = useMemo(() => toRows(users, allKeys), [users, allKeys]);
-  const matchingRows = useMemo(
-    () =>
-      rows.filter(
-        (user) =>
-          (filter === "all" || user.status === filter) &&
-          matchesSearch([user.email, user.status, user.role, user.key_limit], query)
-      ),
-    [rows, query, filter]
+  const searchedRows = useMemo(
+    () => rows.filter((user) => matchesSearch([user.email, user.status, user.role, user.key_limit], query)),
+    [rows, query]
   );
+  const matchingRows = useMemo(
+    () => (filter === "all" ? searchedRows : searchedRows.filter((user) => user.status === filter)),
+    [searchedRows, filter]
+  );
+  // Счётчики в фильтрах учитывают поиск; «Все» — сколько видно во вкладке «Все».
+  const filterOptions = userFilters.map((item) => ({
+    ...item,
+    count:
+      item.id === "all"
+        ? searchedRows.filter((user) => showSuspended || user.status !== "suspended").length
+        : searchedRows.filter((user) => user.status === item.id).length
+  }));
   // В «Все» заблокированные спрятаны под ссылкой, чтобы не мешали; во вкладке «Заблокированы» видны всегда.
   const suspendedCount = filter === "all" ? matchingRows.filter((user) => user.status === "suspended").length : 0;
   const visibleRows = useMemo(
@@ -278,13 +285,9 @@ export function AdminUsers({
   return (
     <>
       <Card className="gap-4">
-        <CardHeader>
-          <CardTitle>Пользователи</CardTitle>
-          <CardAction className="self-center text-sm text-muted-foreground tabular-nums">показано: {sorted.length}</CardAction>
-        </CardHeader>
         <CardContent className="@container grid gap-4">
           <div className="flex min-w-0 flex-col-reverse gap-3 md:flex-row md:items-center md:justify-between">
-            <FilterChips label="Фильтр по статусу" options={userFilters} value={filter} onChange={setFilter} className="md:shrink-0" />
+            <FilterChips label="Фильтр по статусу" options={filterOptions} value={filter} onChange={setFilter} className="md:shrink-0" />
             <div className="min-w-0 md:w-72">
               <SearchBox value={query} onChange={setQuery} placeholder="Почта, статус, роль" />
             </div>

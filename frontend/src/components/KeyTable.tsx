@@ -47,7 +47,7 @@ export function KeyTable({
   onRevoke,
   title = "Ключи",
   titleExtra,
-  showCount = true,
+  showHeader = true,
   headerExtra,
   search,
   beforeList,
@@ -62,8 +62,9 @@ export function KeyTable({
   title?: string;
   /** Подпись рядом с заголовком (например, «6 из 10»). */
   titleExtra?: ReactNode;
-  showCount?: boolean;
-  /** Кнопки справа в шапке списка. */
+  /** Без заголовка — когда он повторяет название страницы; кнопки из headerExtra встают к поиску. */
+  showHeader?: boolean;
+  /** Кнопки справа в шапке списка (без шапки — справа от поиска). */
   headerExtra?: ReactNode;
   /** Поле поиска: на ПК стоит справа в одной строке с фильтрами. */
   search?: ReactNode;
@@ -88,7 +89,6 @@ export function KeyTable({
   }, [autoOpenKeyId]);
 
   const { sorted, sort, toggle } = useSort<VpnKey, KeySort>(keys, keyColumns, { key: "created", dir: "desc" });
-  const activeCount = useMemo(() => keys.filter((key) => key.status === "active").length, [keys]);
   const revokedKeys = useMemo(() => sorted.filter((key) => key.status === "revoked"), [sorted]);
   const baseKeys = collapseRevoked ? sorted.filter((key) => key.status !== "revoked") : sorted;
   const filtered = baseKeys.filter((key) => filter === "all" || key.status === filter);
@@ -96,6 +96,11 @@ export function KeyTable({
   const openKey = keys.find((key) => key.id === openKeyId) ?? null;
   // Пользователю фильтр нужен, только если в списке есть ключи с разными статусами.
   const showChips = collapseRevoked ? new Set(baseKeys.map((key) => key.status)).size > 1 : keys.length > 0;
+  const filterOptions = (collapseRevoked ? filtersWithoutRevoked : allFilters).map((item) => ({
+    ...item,
+    count: item.id === "all" ? baseKeys.length : baseKeys.filter((key) => key.status === item.id).length
+  }));
+  const toolbarExtra = !showHeader && headerExtra;
 
   async function confirmRevoke(key: VpnKey) {
     const ok = await confirm({
@@ -112,22 +117,23 @@ export function KeyTable({
 
   return (
     <Card className="gap-4">
-      <CardHeader>
-        <CardTitle className="flex items-baseline gap-2">
-          {title}
-          {titleExtra}
-          {showCount && <span className="text-sm font-normal text-muted-foreground tabular-nums">активных: {activeCount}</span>}
-        </CardTitle>
-        {headerExtra && <CardAction>{headerExtra}</CardAction>}
-      </CardHeader>
+      {showHeader && (
+        <CardHeader>
+          <CardTitle className="flex items-baseline gap-2">
+            {title}
+            {titleExtra}
+          </CardTitle>
+          {headerExtra && <CardAction>{headerExtra}</CardAction>}
+        </CardHeader>
+      )}
       <CardContent className="@container grid gap-4">
         {beforeList}
-        {(showChips || search) && (
+        {(showChips || search || toolbarExtra) && (
           <div className="flex min-w-0 flex-col-reverse gap-3 md:flex-row md:items-center md:justify-between">
             {showChips ? (
               <FilterChips
                 label="Фильтр по статусу"
-                options={collapseRevoked ? filtersWithoutRevoked : allFilters}
+                options={filterOptions}
                 value={filter}
                 onChange={setFilter}
                 className="md:shrink-0"
@@ -135,7 +141,12 @@ export function KeyTable({
             ) : (
               <span />
             )}
-            {search && <div className="min-w-0 md:w-72">{search}</div>}
+            {(search || toolbarExtra) && (
+              <div className="flex min-w-0 gap-2">
+                {search && <div className="min-w-0 flex-1 md:w-72 md:flex-initial">{search}</div>}
+                {toolbarExtra}
+              </div>
+            )}
           </div>
         )}
         {rendered.length === 0 ? (
