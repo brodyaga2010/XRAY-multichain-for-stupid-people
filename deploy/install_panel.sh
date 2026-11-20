@@ -140,6 +140,19 @@ run_as_panel() {
         "$BIN_PATH" --env-file "$ENV_FILE" "$@"
 }
 
+# Копия базы перед миграцией: сервис останавливается, чтобы файл был согласованным (WAL сброшен).
+# Хранятся 5 последних копий; откат — остановить сервис и вернуть файл на место.
+if [ -f "$DATA_DIR/panel.db" ]; then
+    log "Копия базы перед обновлением"
+    systemctl stop xray-panel 2>/dev/null || true
+    DB_COPY="$DATA_DIR/backups/panel.db.before-update.$(date +%Y%m%d%H%M%S)"
+    cp -p "$DATA_DIR/panel.db" "$DB_COPY"
+    [ -f "$DATA_DIR/panel.db-wal" ] && cp -p "$DATA_DIR/panel.db-wal" "$DB_COPY-wal"
+    ls -1t "$DATA_DIR"/backups/panel.db.before-update.* 2>/dev/null | grep -v -- '-wal$' | tail -n +6 |
+        while read -r old; do rm -f "$old" "$old-wal"; done
+    echo "   $DB_COPY"
+fi
+
 log "База данных и администратор"
 run_as_panel migrate
 run_as_panel seed-admin
