@@ -4,13 +4,14 @@
 #   make build   собрать бинарники в dist/
 #   make test    go vet + go test
 #   make all     web + test + build
+#   make deploy  собрать и выкатить на сервер (настройки — deploy/deploy.env)
 
 VERSION   ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 SITE_NAME ?=
 LDFLAGS   := -s -w -X main.version=$(VERSION)
 WEB_DIST  := internal/web/dist
 
-.PHONY: all web web-reset build build-amd64 build-arm64 test fmt clean
+.PHONY: all web web-reset build build-amd64 build-arm64 test fmt clean deploy
 
 all: web test build
 
@@ -41,3 +42,6 @@ fmt:
 
 clean:
 	rm -rf dist
+
+deploy:
+	VERSION=$(VERSION) ../deploy/deploy.sh

@@ -4,6 +4,7 @@ dist/
 
 # Local deploy secrets/env
 deploy/.env
+deploy/deploy.env
 deploy/secrets/
 
 # OS/editor

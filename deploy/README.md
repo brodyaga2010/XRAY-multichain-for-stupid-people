@@ -29,6 +29,30 @@ sudo ./deploy/install_panel.sh \
 
 Повторный запуск того же скрипта — обновление (настройки и база сохраняются).
 
+### Обновление одной командой
+
+С машины разработчика кабинет обновляется командой
+
+```bash
+make -C server deploy VERSION=v2.8.0
+```
+
+Она собирает фронтенд и бинарник, копирует их на сервер, запускает `install_panel.sh` и проверяет,
+что поднялась нужная версия и сайт отвечает. Настройки — в `deploy/deploy.env` (в git не попадает,
+пример — `deploy/deploy.env.example`): адрес сервера, путь к SSH-ключу, домены и имя сайта.
+
+Вход на серверы — только по SSH-ключу. Чтобы выключить вход по паролю, положите ключ в
+`~/.ssh/authorized_keys` и создайте `/etc/ssh/sshd_config.d/00-keys-only.conf`:
+
+```
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin prohibit-password
+```
+
+затем `sshd -t && systemctl reload ssh`. Файл с префиксом `00-` читается первым и перекрывает
+настройки cloud-init. Перед перезагрузкой sshd проверьте вход по ключу во втором окне терминала.
+
 Что получится:
 
 - `https://panel.example.com` — личный кабинет; `https://example.com` — сайт-заглушка.
