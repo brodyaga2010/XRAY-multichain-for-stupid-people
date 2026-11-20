@@ -175,3 +175,116 @@ func TestFormatDuration(t *testing.T) {
 		}
 	}
 }
+
+// memPersister — хранение в памяти для тестов.
+type memPersister struct {
+	points    []Point
+	incidents []Incident
+	pruned    time.Time
+}
+
+func (p *memPersister) SavePoint(_ context.Context, pt Point) error {
+	p.points = append(p.points, pt)
+	return nil
+}
+
+func (p *memPersister) SaveIncident(_ context.Context, inc Incident) error {
+	for i := range p.incidents {
+		if p.incidents[i].CheckID == inc.CheckID && p.incidents[i].Start.Equal(inc.Start) {
+			p.incidents[i] = inc
+			return nil
+		}
+	}
+	p.incidents = append(p.incidents, inc)
+	return nil
+}
+
+func (p *memPersister) LoadPoints(_ context.Context, since time.Time) ([]Point, error) {
+	var out []Point
+	for _, pt := range p.points {
+		if !pt.At.Before(since) {
+			out = append(out, pt)
+		}
+	}
+	return out, nil
+}
+
+func (p *memPersister) LoadIncidents(_ context.Context, limit int) ([]Incident, error) {
+	if len(p.incidents) > limit {
+		return p.incidents[len(p.incidents)-limit:], nil
+	}
+	return p.incidents, nil
+}
+
+func (p *memPersister) PrunePoints(_ context.Context, before time.Time) error {
+	p.pruned = before
+	return nil
+}
+
+func TestPersistAndRestore(t *testing.T) {
+	const ok, fail = StatusOK, StatusFail
+	tests := []struct {
+		name         string
+		statuses     []Status
+		wantPoints   int
+		wantOpen     int
+		wantClosed   int
+		wantRecovery bool // после перезапуска первое «ok» присылает сообщение о восстановлении
+	}{
+		{"без сбоев", []Status{ok, ok}, 2, 0, 0, false},
+		{"сбой закрыт до перезапуска", []Status{fail, fail, ok}, 3, 0, 1, false},
+		{"сбой открыт на момент перезапуска", []Status{fail, fail, fail}, 3, 1, 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &memPersister{}
+			check := scripted("a", tt.statuses...)
+			check.History = true
+			m, _, clock := newTestMonitor(2, check)
+			m.SetPersister(store)
+			for range tt.statuses {
+				m.RunOnce(context.Background())
+				*clock = clock.Add(time.Minute)
+			}
+
+			open, closed := 0, 0
+			for _, inc := range store.incidents {
+				if inc.End == nil {
+					open++
+				} else {
+					closed++
+				}
+			}
+			if len(store.points) != tt.wantPoints || open != tt.wantOpen || closed != tt.wantClosed {
+				t.Fatalf("в базе: точек %d, открытых %d, закрытых %d", len(store.points), open, closed)
+			}
+			if !store.pruned.Equal(clock.Add(-time.Minute - keepPoints)) {
+				t.Errorf("очистка до %v", store.pruned)
+			}
+
+			// перезапуск: новый монитор поднимает историю из базы
+			m2, rec2, clock2 := newTestMonitor(2, scripted("a", ok))
+			*clock2 = *clock
+			m2.SetPersister(store)
+			if err := m2.Restore(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			snap := m2.Snapshot()
+			if len(snap.History) != tt.wantPoints || len(snap.Incidents) != tt.wantOpen+tt.wantClosed {
+				t.Fatalf("после перезапуска: точек %d, сбоев %d", len(snap.History), len(snap.Incidents))
+			}
+			m2.RunOnce(context.Background())
+			gotRecovery := len(rec2.msgs) == 1 && strings.HasPrefix(rec2.msgs[0], "🟢")
+			if gotRecovery != tt.wantRecovery || (!tt.wantRecovery && len(rec2.msgs) != 0) {
+				t.Errorf("сообщения после перезапуска: %q", rec2.msgs)
+			}
+		})
+	}
+}
+
+func TestRestoreWithoutPersister(t *testing.T) {
+	m, _, _ := newTestMonitor(1)
+	if err := m.Restore(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}

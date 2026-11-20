@@ -211,6 +211,10 @@ func serve(ctx context.Context, cfg *config.Config) error {
 	mon := newMonitor(cfg, manager)
 	monitorDone := make(chan struct{})
 	if mon != nil {
+		mon.SetPersister(monitorStore{st})
+		if err := mon.Restore(ctx); err != nil {
+			slog.Warn("история мониторинга не загружена", "error", err)
+		}
 		app.SetStatusSource(mon)
 		go func() {
 			defer close(monitorDone)

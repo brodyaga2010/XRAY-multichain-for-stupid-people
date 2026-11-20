@@ -155,7 +155,7 @@ func TestExistingAlembicDatabaseWorks(t *testing.T) {
 			}
 			var version string
 			_ = st.DB().QueryRow("SELECT version_num FROM alembic_version").Scan(&version)
-			if version != "0002_panel_v2" {
+			if version != store.LatestRevision {
 				t.Errorf("версия схемы %s", version)
 			}
 		})

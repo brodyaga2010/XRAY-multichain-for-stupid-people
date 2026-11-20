@@ -60,6 +60,16 @@ func openTemp(t *testing.T) *Store {
 	return st
 }
 
+// openMigrated — временная база с актуальной схемой.
+func openMigrated(t *testing.T) *Store {
+	t.Helper()
+	st := openTemp(t)
+	if _, err := st.Migrate(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
 func columns(t *testing.T, st *Store, table string) []string {
 	t.Helper()
 	rows, err := st.DB().Query("SELECT name FROM pragma_table_info(?)", table)
@@ -93,13 +103,15 @@ func TestMigrateCreatesSchemaOnEmptyDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if v := version(t, st); v != "0002_panel_v2" {
+	if v := version(t, st); v != LatestRevision {
 		t.Errorf("версия = %s", v)
 	}
 	want := map[string][]string{
-		"users":      {"created_at", "email", "id", "key_limit", "password_hash", "role", "status", "sub_token", "updated_at"},
-		"vpn_keys":   {"client_config_json", "connection_uri", "created_at", "id", "last_seen_at", "name", "owner_id", "public_key", "short_id", "sni", "status", "traffic_down", "traffic_up", "type", "updated_at", "uuid"},
-		"audit_logs": {"action", "actor_id", "created_at", "id", "metadata", "target_id", "target_type"},
+		"users":             {"created_at", "email", "id", "key_limit", "password_hash", "role", "status", "sub_token", "updated_at"},
+		"vpn_keys":          {"client_config_json", "connection_uri", "created_at", "id", "last_seen_at", "name", "owner_id", "public_key", "short_id", "sni", "status", "traffic_down", "traffic_up", "type", "updated_at", "uuid"},
+		"audit_logs":        {"action", "actor_id", "created_at", "id", "metadata", "target_id", "target_type"},
+		"monitor_points":    {"at", "ms", "status"},
+		"monitor_incidents": {"check_id", "detail", "ended_at", "id", "name", "started_at", "status"},
 	}
 	for table, cols := range want {
 		if got := columns(t, st, table); !reflect.DeepEqual(got, cols) {
@@ -114,7 +126,7 @@ func TestMigrateCreatesSchemaOnEmptyDatabase(t *testing.T) {
 		indexes = append(indexes, n)
 	}
 	rows.Close()
-	if !reflect.DeepEqual(indexes, []string{"ix_users_email", "ix_vpn_keys_owner_id"}) {
+	if !reflect.DeepEqual(indexes, []string{"ix_monitor_incidents_started_at", "ix_users_email", "ix_vpn_keys_owner_id"}) {
 		t.Errorf("индексы: %v", indexes)
 	}
 	var journal string
@@ -156,7 +168,7 @@ func TestMigrateUpgrades0001KeepingData(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !strings.Contains(result, "0001_initial -> 0002_panel_v2") || version(t, st) != "0002_panel_v2" {
+	if !strings.Contains(result, "0001_initial -> "+LatestRevision) || version(t, st) != LatestRevision {
 		t.Errorf("результат %q, версия %s", result, version(t, st))
 	}
 	ctx := context.Background()

@@ -96,6 +96,7 @@ type Monitor struct {
 	interval  time.Duration
 	threshold int
 	notifier  Notifier
+	persist   Persister
 	log       *slog.Logger
 	now       func() time.Time
 
@@ -104,6 +105,10 @@ type Monitor struct {
 	history   []Point
 	incidents []Incident
 	checkedAt time.Time
+
+	// изменения текущего цикла для записи в базу (заполняет apply под m.mu)
+	newPoints    []Point
+	newIncidents []Incident
 }
 
 // New создаёт монитор; threshold — сколько плохих проверок подряд нужно для тревоги.
@@ -179,8 +184,14 @@ func (m *Monitor) RunOnce(ctx context.Context) {
 		}
 	}
 	m.checkedAt = now
-	notifier := m.notifier
+	notifier, persist := m.notifier, m.persist
+	points, incidents := m.newPoints, m.newIncidents
+	m.newPoints, m.newIncidents = nil, nil
 	m.mu.Unlock()
+
+	if persist != nil {
+		m.flush(ctx, persist, points, incidents, now)
+	}
 
 	for _, msg := range messages {
 		m.log.Warn("мониторинг", "событие", msg)
@@ -215,7 +226,9 @@ func (m *Monitor) apply(c Check, r Result, now time.Time) string {
 	st.Result, st.CheckedAt, st.lastRun = r, now, now
 
 	if c.History {
-		m.history = append(m.history, Point{At: now, Ms: r.Ms, Status: r.Status})
+		point := Point{At: now, Ms: r.Ms, Status: r.Status}
+		m.history = append(m.history, point)
+		m.newPoints = append(m.newPoints, point)
 		cut := 0
 		for cut < len(m.history) && now.Sub(m.history[cut].At) > historyWindow {
 			cut++
@@ -230,7 +243,9 @@ func (m *Monitor) apply(c Check, r Result, now time.Time) string {
 		st.bad++
 		if st.bad >= m.threshold && !st.Alerted {
 			st.Alerted = true
-			m.incidents = append(m.incidents, Incident{CheckID: c.ID, Name: c.Name, Status: r.Status, Detail: r.Detail, Start: st.badSince})
+			inc := Incident{CheckID: c.ID, Name: c.Name, Status: r.Status, Detail: r.Detail, Start: st.badSince}
+			m.incidents = append(m.incidents, inc)
+			m.newIncidents = append(m.newIncidents, inc)
 			if len(m.incidents) > maxIncidents {
 				m.incidents = m.incidents[len(m.incidents)-maxIncidents:]
 			}
@@ -251,6 +266,7 @@ func (m *Monitor) apply(c Check, r Result, now time.Time) string {
 		if m.incidents[i].CheckID == c.ID && m.incidents[i].End == nil {
 			end := now
 			m.incidents[i].End = &end
+			m.newIncidents = append(m.newIncidents, m.incidents[i])
 			break
 		}
 	}

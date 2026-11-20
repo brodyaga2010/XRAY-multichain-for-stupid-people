@@ -9,6 +9,7 @@ import (
 const (
 	revisionInitial = "0001_initial"
 	revisionPanelV2 = "0002_panel_v2"
+	revisionMonitor = "0003_monitor_history"
 )
 
 // Схема, идентичная результату alembic 0001 + 0002 (как её создаёт SQLAlchemy на SQLite).
@@ -76,72 +77,126 @@ var upgradeTo0002 = []string{
 	`ALTER TABLE vpn_keys ADD COLUMN last_seen_at DATETIME`,
 }
 
-// Migrate приводит базу к версии 0002_panel_v2. Идемпотентна.
-// Нет таблиц — создаёт схему; 0001_initial — применяет 0002; 0002_panel_v2 — ничего не делает.
+// migration — шаг схемы from → to.
+type migration struct {
+	from, to string
+	stmts    []string
+}
+
+// Цепочка миграций по порядку; последняя to — актуальная версия схемы.
+var migrations = []migration{
+	{revisionInitial, revisionPanelV2, upgradeTo0002},
+	{revisionPanelV2, revisionMonitor, upgradeTo0003},
+}
+
+// LatestRevision — актуальная версия схемы.
+var LatestRevision = migrations[len(migrations)-1].to
+
+// 0003: история мониторинга переживает перезапуск кабинета.
+var upgradeTo0003 = []string{
+	`CREATE TABLE monitor_points (
+	at DATETIME NOT NULL,
+	ms FLOAT,
+	status VARCHAR(16) NOT NULL,
+	PRIMARY KEY (at)
+)`,
+	`CREATE TABLE monitor_incidents (
+	id INTEGER NOT NULL,
+	check_id VARCHAR(32) NOT NULL,
+	name VARCHAR(128) NOT NULL,
+	status VARCHAR(16) NOT NULL,
+	detail TEXT DEFAULT '' NOT NULL,
+	started_at DATETIME NOT NULL,
+	ended_at DATETIME,
+	PRIMARY KEY (id)
+)`,
+	`CREATE INDEX ix_monitor_incidents_started_at ON monitor_incidents (started_at)`,
+}
+
+// Migrate приводит базу к последней версии. Идемпотентна.
+// Нет таблиц — создаёт схему 0002 и применяет следующие шаги; известная версия — догоняет до последней.
 func (s *Store) Migrate(ctx context.Context) (string, error) {
 	var result string
 	err := s.Tx(ctx, func(q *Queries) error {
-		hasVersion, err := tableExists(ctx, q.db, "alembic_version")
+		current, created, err := currentRevision(ctx, q.db)
 		if err != nil {
 			return err
 		}
-		if !hasVersion {
-			hasUsers, err := tableExists(ctx, q.db, "users")
-			if err != nil {
-				return err
+		start := current
+		for _, m := range migrations {
+			if m.from != current {
+				continue
 			}
-			if hasUsers {
-				return fmt.Errorf("таблица users есть, а alembic_version нет: схема неизвестной версии, миграция отменена")
-			}
-			for _, stmt := range schemaStatements {
+			for _, stmt := range m.stmts {
 				if _, err := q.db.ExecContext(ctx, stmt); err != nil {
-					return fmt.Errorf("создание схемы: %w", err)
+					return fmt.Errorf("применение %s: %w", m.to, err)
 				}
 			}
-			if _, err := q.db.ExecContext(ctx, `INSERT INTO alembic_version (version_num) VALUES (?)`, revisionPanelV2); err != nil {
-				return err
-			}
-			result = "схема создана (" + revisionPanelV2 + ")"
-			return nil
+			current = m.to
 		}
-
-		var versions []string
-		rows, err := q.db.QueryContext(ctx, `SELECT version_num FROM alembic_version`)
-		if err != nil {
+		if current != LatestRevision {
+			return fmt.Errorf("неизвестная версия схемы %q", start)
+		}
+		if _, err := q.db.ExecContext(ctx, `UPDATE alembic_version SET version_num = ?`, current); err != nil {
 			return err
 		}
-		for rows.Next() {
-			var v string
-			if err := rows.Scan(&v); err != nil {
-				rows.Close()
-				return err
-			}
-			versions = append(versions, v)
-		}
-		rows.Close()
-		if len(versions) != 1 {
-			return fmt.Errorf("alembic_version содержит %d записей, ожидается одна", len(versions))
-		}
-		switch versions[0] {
-		case revisionPanelV2:
-			result = "схема актуальна (" + revisionPanelV2 + ")"
-			return nil
-		case revisionInitial:
-			for _, stmt := range upgradeTo0002 {
-				if _, err := q.db.ExecContext(ctx, stmt); err != nil {
-					return fmt.Errorf("применение %s: %w", revisionPanelV2, err)
-				}
-			}
-			if _, err := q.db.ExecContext(ctx, `UPDATE alembic_version SET version_num = ?`, revisionPanelV2); err != nil {
-				return err
-			}
-			result = "схема обновлена " + revisionInitial + " -> " + revisionPanelV2
-			return nil
+		switch {
+		case created:
+			result = "схема создана (" + current + ")"
+		case start == current:
+			result = "схема актуальна (" + current + ")"
 		default:
-			return fmt.Errorf("неизвестная версия схемы %q", versions[0])
+			result = "схема обновлена " + start + " -> " + current
 		}
+		return nil
 	})
 	return result, err
+}
+
+// currentRevision — версия схемы; пустая база получает схему 0002 (created = true).
+func currentRevision(ctx context.Context, db DBTX) (string, bool, error) {
+	hasVersion, err := tableExists(ctx, db, "alembic_version")
+	if err != nil {
+		return "", false, err
+	}
+	if !hasVersion {
+		hasUsers, err := tableExists(ctx, db, "users")
+		if err != nil {
+			return "", false, err
+		}
+		if hasUsers {
+			return "", false, fmt.Errorf("таблица users есть, а alembic_version нет: схема неизвестной версии, миграция отменена")
+		}
+		for _, stmt := range schemaStatements {
+			if _, err := db.ExecContext(ctx, stmt); err != nil {
+				return "", false, fmt.Errorf("создание схемы: %w", err)
+			}
+		}
+		if _, err := db.ExecContext(ctx, `INSERT INTO alembic_version (version_num) VALUES (?)`, revisionPanelV2); err != nil {
+			return "", false, err
+		}
+		return revisionPanelV2, true, nil
+	}
+	var versions []string
+	rows, err := db.QueryContext(ctx, `SELECT version_num FROM alembic_version`)
+	if err != nil {
+		return "", false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return "", false, err
+		}
+		versions = append(versions, v)
+	}
+	if err := rows.Err(); err != nil {
+		return "", false, err
+	}
+	if len(versions) != 1 {
+		return "", false, fmt.Errorf("alembic_version содержит %d записей, ожидается одна", len(versions))
+	}
+	return versions[0], false, nil
 }
 
 func tableExists(ctx context.Context, db DBTX, name string) (bool, error) {
