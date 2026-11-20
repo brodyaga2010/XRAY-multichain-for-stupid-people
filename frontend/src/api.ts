@@ -29,6 +29,8 @@ export interface User {
   /** До какого момента действует подписка; null — бессрочно. */
   paid_until: string | null;
   subscription_active: boolean;
+  /** Адрес подтверждён по ссылке из письма. */
+  email_verified: boolean;
   created_at: string;
 }
 
@@ -206,6 +208,15 @@ export const api = {
   ownTraffic: (days: number) => request<TrafficDay[]>(`/keys/traffic?days=${days}`),
   subscription: () => request<{ url: string }>("/keys/subscription"),
   rotateSubscription: () => request<{ url: string }>("/keys/subscription/rotate", { method: "POST" }),
+  verifyEmail: (token: string) =>
+    request<{ message: string; user: User }>("/auth/verify-email", { method: "POST", body: JSON.stringify({ token }) }),
+  resendVerification: () => request<{ message: string }>("/auth/resend-verification", { method: "POST" }),
+  forgotPassword: (email: string) =>
+    request<{ message: string }>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
+  resetPassword: (token: string, new_password: string) =>
+    request<{ message: string }>("/auth/reset-password", { method: "POST", body: JSON.stringify({ token, new_password }) }),
+  changeEmail: (new_email: string, password: string) =>
+    request<{ message: string }>("/auth/change-email", { method: "POST", body: JSON.stringify({ new_email, password }) }),
   changePassword: (current_password: string, new_password: string) =>
     request<{ message: string }>("/auth/password", {
       method: "POST",

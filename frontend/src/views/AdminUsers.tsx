@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
-import { CalendarPlus, Check, ChevronRight, Tags, X } from "lucide-react";
+import { CalendarPlus, Check, ChevronRight, MailWarning, Tags, X } from "lucide-react";
 import { api, BulkAction, Plan, PlanInput, SubscriptionChange, User, UserStatus, VpnKey } from "@/api";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { FilterChips } from "@/components/FilterChips";
@@ -438,8 +438,15 @@ export function AdminUsers({
                           <div className="flex items-center gap-3">
                             <UserAvatar email={user.email} />
                             <div className="grid min-w-40">
-                              <span className="truncate font-medium" title={user.email}>
-                                {user.email}
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <span className="truncate font-medium" title={user.email}>
+                                  {user.email}
+                                </span>
+                                {!user.email_verified && (
+                                  <MailWarning className="size-3.5 shrink-0 text-warning-foreground" aria-label="почта не подтверждена">
+                                    <title>Почта не подтверждена</title>
+                                  </MailWarning>
+                                )}
                               </span>
                               {userNote(user) && <span className="text-xs text-muted-foreground">{userNote(user)}</span>}
                             </div>

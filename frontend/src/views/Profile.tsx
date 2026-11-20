@@ -1,6 +1,8 @@
 import { FormEvent, useState } from "react";
 import { LogOut } from "lucide-react";
 import { api, User } from "@/api";
+import { EmailSettings } from "@/components/EmailSettings";
+import { SubscriptionSummary } from "@/components/SubscriptionForm";
 import { ThemeToggleInline } from "@/components/ThemeToggleInline";
 import { UserAvatar } from "@/components/UserAvatar";
 import { Button } from "@/components/ui/button";
@@ -41,41 +43,53 @@ export function Profile({ user, onLogout }: { user: User; onLogout: () => void }
 
   return (
     <div className="grid items-start gap-4 md:grid-cols-2 md:gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Аккаунт</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          <div className="flex items-center gap-3">
-            <UserAvatar email={user.email} size="lg" />
-            <div className="grid min-w-0">
-              <span className="truncate font-medium" title={user.email}>
-                {user.email}
-              </span>
-              <span className="text-sm text-muted-foreground">
-                {user.role === "admin" ? "Администратор" : "Пользователь"} · лимит ключей {user.key_limit}
-              </span>
+      <div className="grid gap-4 md:gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Аккаунт</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <div className="flex items-center gap-3">
+              <UserAvatar email={user.email} size="lg" />
+              <div className="grid min-w-0">
+                <span className="truncate font-medium" title={user.email}>
+                  {user.email}
+                </span>
+                <span className="text-sm text-muted-foreground">
+                  {user.role === "admin" ? "Администратор" : "Пользователь"} · лимит ключей {user.key_limit}
+                </span>
+              </div>
             </div>
-          </div>
-          <Separator />
-          <div className="flex items-center justify-between gap-3">
-            <div className="grid">
-              <span className="text-sm font-medium">Тема оформления</span>
-              <span className="text-xs text-muted-foreground">Запоминается в этом браузере</span>
+            {user.role !== "admin" && (
+              <>
+                <Separator />
+                <div className="flex items-baseline justify-between gap-3 text-sm">
+                  <span className="font-medium">Подписка</span>
+                  <SubscriptionSummary user={user} className="text-right" />
+                </div>
+              </>
+            )}
+            <Separator />
+            <div className="flex items-center justify-between gap-3">
+              <div className="grid">
+                <span className="text-sm font-medium">Тема оформления</span>
+                <span className="text-xs text-muted-foreground">Запоминается в этом браузере</span>
+              </div>
+              <ThemeToggleInline />
             </div>
-            <ThemeToggleInline />
-          </div>
-          <Separator />
-          <Button variant="destructive" size="lg" className="justify-self-start" onClick={onLogout}>
-            <LogOut />
-            Выйти
-          </Button>
-        </CardContent>
-      </Card>
+            <Separator />
+            <Button variant="destructive" size="lg" className="justify-self-start" onClick={onLogout}>
+              <LogOut />
+              Выйти
+            </Button>
+          </CardContent>
+        </Card>
+        <EmailSettings user={user} />
+      </div>
       <Card>
         <CardHeader>
           <CardTitle>Смена пароля</CardTitle>
-          <CardDescription>Новый пароль — от 8 символов.</CardDescription>
+          <CardDescription>Новый пароль — от 8 символов. На других устройствах нужно будет войти заново.</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="grid gap-4" onSubmit={submit}>

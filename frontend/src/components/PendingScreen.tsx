@@ -20,6 +20,11 @@ export function PendingScreen({ user, onLogout }: { user: User; onLogout: () => 
             Аккаунт <span className="font-medium text-foreground">{user.email}</span> зарегистрирован. Как только
             администратор его подтвердит, здесь можно будет создавать ключи доступа.
           </p>
+          {!user.email_verified && (
+            <p className="text-sm text-muted-foreground">
+              Пока ждёте, подтвердите почту — мы отправили письмо со ссылкой. Без этого не получится восстановить пароль.
+            </p>
+          )}
           <Button variant="outline" size="lg" className="mt-2" onClick={onLogout}>
             Выйти
           </Button>

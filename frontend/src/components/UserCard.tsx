@@ -73,6 +73,7 @@ export function UserCard({
                 {user.role === "admin" ? "Администратор" : "Пользователь"}
                 {isSelf && " (вы)"} · с {formatDate(user.created_at)}
               </span>
+              {!user.email_verified && <span className="text-warning-foreground">почта не подтверждена</span>}
             </div>
           </div>
           <div className="flex gap-2 max-sm:w-full max-sm:[&>*]:flex-1">
