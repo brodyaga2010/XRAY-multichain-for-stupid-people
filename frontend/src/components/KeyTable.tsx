@@ -4,11 +4,13 @@ import { KeyStatus, VpnKey } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { SortColumn, timeOf, useSort } from "@/lib/sort";
 import { cn } from "@/lib/utils";
 import { formatDate, keyTitle, shortUuid } from "@/utils";
 import { useConfirm } from "./ConfirmDialog";
 import { FilterChips } from "./FilterChips";
 import { OnlineIndicator, Traffic } from "./KeyActivity";
+import { SortableHead } from "./SortableHead";
 import { KeyModal } from "./KeyModal";
 import { StatusBadge } from "./StatusBadge";
 
@@ -21,6 +23,20 @@ const allFilters: Array<{ id: KeyFilter; label: string }> = [
   { id: "revoked", label: "Отозванные" }
 ];
 const filtersWithoutRevoked = allFilters.filter((item) => item.id !== "revoked");
+
+type KeySort = "name" | "owner" | "activity" | "traffic" | "created";
+
+const keyColumns: Record<KeySort, SortColumn<VpnKey>> = {
+  name: { value: (key) => keyTitle(key) },
+  owner: { value: (key) => key.owner_email },
+  // Сначала те, кто в сети, потом по времени последнего подключения; отключённые и отозванные — в конце.
+  activity: {
+    value: (key) => (key.status !== "active" ? null : key.online ? Number.MAX_SAFE_INTEGER : timeOf(key.last_seen_at)),
+    firstDir: "desc"
+  },
+  traffic: { value: (key) => key.traffic_down + key.traffic_up, firstDir: "desc" },
+  created: { value: (key) => timeOf(key.created_at), firstDir: "desc" }
+};
 
 const connectClass = "bg-accent text-accent-foreground hover:bg-accent/70";
 const deleteClass = "text-muted-foreground hover:bg-destructive/10 hover:text-destructive";
@@ -71,10 +87,7 @@ export function KeyTable({
     if (autoOpenKeyId !== null) setOpenKeyId(autoOpenKeyId);
   }, [autoOpenKeyId]);
 
-  const sorted = useMemo(
-    () => [...keys].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
-    [keys]
-  );
+  const { sorted, sort, toggle } = useSort<VpnKey, KeySort>(keys, keyColumns, { key: "created", dir: "desc" });
   const activeCount = useMemo(() => keys.filter((key) => key.status === "active").length, [keys]);
   const revokedKeys = useMemo(() => sorted.filter((key) => key.status === "revoked"), [sorted]);
   const baseKeys = collapseRevoked ? sorted.filter((key) => key.status !== "revoked") : sorted;
@@ -134,10 +147,23 @@ export function KeyTable({
                 <Table>
                   <TableHeader className="bg-muted/50">
                     <TableRow>
-                      <TableHead className="pl-4">Ключ</TableHead>
-                      {showOwner && <TableHead>Владелец</TableHead>}
-                      <TableHead>Подключение</TableHead>
-                      <TableHead>Трафик</TableHead>
+                      <SortableHead column="name" sort={sort} onSort={toggle} className="pl-4">
+                        Ключ
+                      </SortableHead>
+                      {showOwner && (
+                        <SortableHead column="owner" sort={sort} onSort={toggle}>
+                          Владелец
+                        </SortableHead>
+                      )}
+                      <SortableHead column="activity" sort={sort} onSort={toggle}>
+                        Подключение
+                      </SortableHead>
+                      <SortableHead column="traffic" sort={sort} onSort={toggle}>
+                        Трафик
+                      </SortableHead>
+                      <SortableHead column="created" sort={sort} onSort={toggle}>
+                        Создан
+                      </SortableHead>
                       <TableHead className="w-0" />
                     </TableRow>
                   </TableHeader>
@@ -149,9 +175,7 @@ export function KeyTable({
                             <span className="truncate font-medium" title={keyTitle(key)}>
                               {keyTitle(key)}
                             </span>
-                            <span className="font-mono text-xs text-muted-foreground">
-                              {shortUuid(key.uuid)} · с {formatDate(key.created_at)}
-                            </span>
+                            <span className="font-mono text-xs text-muted-foreground">{shortUuid(key.uuid)}</span>
                           </div>
                         </TableCell>
                         {showOwner && (
@@ -165,6 +189,7 @@ export function KeyTable({
                         <TableCell>
                           <Traffic keyItem={key} />
                         </TableCell>
+                        <TableCell className="text-muted-foreground tabular-nums">{formatDate(key.created_at)}</TableCell>
                         <TableCell className="pr-3">
                           {key.status !== "revoked" && (
                             <div className="flex justify-end gap-1">

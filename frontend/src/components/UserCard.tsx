@@ -1,11 +1,11 @@
 import { FormEvent, useState } from "react";
-import { ArrowLeft } from "lucide-react";
 import { User, VpnKey } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 import { formatBytes, formatDate, formatSeen } from "@/utils";
 import { CreateKeyForm } from "./CreateKeyForm";
 import { StatusBadge } from "./StatusBadge";
@@ -16,7 +16,7 @@ export function UserCard({
   user,
   keys,
   isSelf,
-  onBack,
+  className,
   onApprove,
   onSuspend,
   onRestore,
@@ -26,8 +26,7 @@ export function UserCard({
   user: User;
   keys: VpnKey[];
   isSelf: boolean;
-  /** Кнопка «назад» к списку (только на телефоне). */
-  onBack?: () => void;
+  className?: string;
   onApprove: () => void;
   onSuspend: () => void;
   onRestore: () => void;
@@ -53,14 +52,8 @@ export function UserCard({
   ];
 
   return (
-    <Card>
+    <Card className={cn(className)}>
       <CardContent className="@container grid gap-5">
-        {onBack && (
-          <Button variant="ghost" className="-ml-2 justify-self-start" onClick={onBack}>
-            <ArrowLeft />
-            Пользователи
-          </Button>
-        )}
         <div className="flex flex-wrap items-center gap-3">
           <UserAvatar email={user.email} size="lg" />
           <div className="grid min-w-0 flex-1 gap-1">
