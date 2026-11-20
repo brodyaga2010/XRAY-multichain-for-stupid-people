@@ -3,7 +3,7 @@ import { AuditQuery, auditQueryString } from "@/lib/audit";
 export type UserStatus = "pending" | "approved" | "suspended";
 export type UserRole = "user" | "admin";
 export type KeyType = "multi" | "tcp_reality" | "xhttp_reality";
-export type BulkAction = "approve" | "suspend" | "restore";
+export type BulkAction = "approve" | "suspend" | "restore" | "extend";
 
 export type BulkResult = {
   updated: User[];
@@ -14,7 +14,8 @@ export type BulkResult = {
 /** Трафик за день (день — по часовому поясу сервера). */
 export type TrafficDay = { day: string; up: number; down: number };
 
-export type KeyStatus = "active" | "suspended" | "revoked";
+/** expired — ключ отключён, потому что закончилась подписка владельца. */
+export type KeyStatus = "active" | "suspended" | "revoked" | "expired";
 export type LinkTransport = "tcp" | "grpc" | "xhttp";
 
 export interface User {
@@ -23,8 +24,34 @@ export interface User {
   role: UserRole;
   status: UserStatus;
   key_limit: number;
+  /** Тариф; null — без тарифа. */
+  plan_id: number | null;
+  /** До какого момента действует подписка; null — бессрочно. */
+  paid_until: string | null;
+  subscription_active: boolean;
   created_at: string;
 }
+
+export interface Plan {
+  id: number;
+  name: string;
+  key_limit: number;
+  /** Срок по умолчанию при назначении; 0 — бессрочно. */
+  duration_days: number;
+  is_default: boolean;
+  users: number;
+  created_at: string;
+}
+
+export type PlanInput = Pick<Plan, "name" | "key_limit" | "duration_days" | "is_default">;
+
+/** Изменение подписки: отсутствующее поле не меняется, null — без тарифа / бессрочно. */
+export type SubscriptionChange = {
+  plan_id?: number | null;
+  /** "ГГГГ-ММ-ДД" — до конца этого дня. */
+  paid_until?: string | null;
+  extend_months?: number;
+};
 
 export interface KeyLink {
   transport: LinkTransport;
@@ -146,8 +173,17 @@ export const api = {
   adminKeys: () => request<VpnKey[]>("/admin/keys"),
   adminStatus: () => request<MonitorStatus>("/admin/status"),
   adminUserKeys: (userId: number) => request<VpnKey[]>(`/admin/users/${userId}/keys`),
-  bulkUsers: (action: BulkAction, userIds: number[]) =>
-    request<BulkResult>("/admin/users/bulk", { method: "POST", body: JSON.stringify({ action, user_ids: userIds }) }),
+  bulkUsers: (action: BulkAction, userIds: number[], months?: number) =>
+    request<BulkResult>("/admin/users/bulk", {
+      method: "POST",
+      body: JSON.stringify({ action, user_ids: userIds, months })
+    }),
+  updateSubscription: (userId: number, change: SubscriptionChange) =>
+    request<User>(`/admin/users/${userId}/subscription`, { method: "PATCH", body: JSON.stringify(change) }),
+  adminPlans: () => request<Plan[]>("/admin/plans"),
+  savePlan: (plan: PlanInput, id?: number) =>
+    request<Plan>(id ? `/admin/plans/${id}` : "/admin/plans", { method: id ? "PUT" : "POST", body: JSON.stringify(plan) }),
+  deletePlan: (id: number) => request<{ message: string }>(`/admin/plans/${id}`, { method: "DELETE" }),
   approveUser: (userId: number) => request<User>(`/admin/users/${userId}/approve`, { method: "POST" }),
   suspendUser: (userId: number) => request<User>(`/admin/users/${userId}/suspend`, { method: "POST" }),
   restoreUser: (userId: number) => request<User>(`/admin/users/${userId}/restore`, { method: "POST" }),

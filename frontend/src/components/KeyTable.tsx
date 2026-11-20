@@ -20,6 +20,7 @@ const allFilters: Array<{ id: KeyFilter; label: string }> = [
   { id: "all", label: "Все" },
   { id: "active", label: "Активные" },
   { id: "suspended", label: "Отключённые" },
+  { id: "expired", label: "Истекли" },
   { id: "revoked", label: "Отозванные" }
 ];
 const filtersWithoutRevoked = allFilters.filter((item) => item.id !== "revoked");
@@ -96,10 +97,13 @@ export function KeyTable({
   const openKey = keys.find((key) => key.id === openKeyId) ?? null;
   // Пользователю фильтр нужен, только если в списке есть ключи с разными статусами.
   const showChips = collapseRevoked ? new Set(baseKeys.map((key) => key.status)).size > 1 : keys.length > 0;
-  const filterOptions = (collapseRevoked ? filtersWithoutRevoked : allFilters).map((item) => ({
-    ...item,
-    count: item.id === "all" ? baseKeys.length : baseKeys.filter((key) => key.status === item.id).length
-  }));
+  // «Истекли» — только если такие ключи есть (или фильтр уже выбран).
+  const filterOptions = (collapseRevoked ? filtersWithoutRevoked : allFilters)
+    .map((item) => ({
+      ...item,
+      count: item.id === "all" ? baseKeys.length : baseKeys.filter((key) => key.status === item.id).length
+    }))
+    .filter((item) => item.id !== "expired" || item.count > 0 || filter === "expired");
   const toolbarExtra = !showHeader && headerExtra;
 
   async function confirmRevoke(key: VpnKey) {
@@ -263,7 +267,9 @@ export function KeyTable({
                           Подключить
                         </Button>
                       ) : (
-                        <span className="flex-1 text-sm text-muted-foreground">Отключён вместе с пользователем</span>
+                        <span className="flex-1 text-sm text-muted-foreground">
+                          {key.status === "expired" ? "Подписка закончилась" : "Отключён вместе с пользователем"}
+                        </span>
                       )}
                       <Button
                         variant="ghost"

@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useState } from "react";
-import { api, User, VpnKey } from "@/api";
+import { api, Plan, SubscriptionChange, User, VpnKey } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { formatBytes, formatDate, formatSeen } from "@/utils";
 import { CreateKeyForm } from "./CreateKeyForm";
 import { StatusBadge } from "./StatusBadge";
+import { SubscriptionForm } from "./SubscriptionForm";
 import { TrafficChart } from "./TrafficChart";
 import { UserAvatar } from "./UserAvatar";
 
@@ -22,7 +23,9 @@ export function UserCard({
   onSuspend,
   onRestore,
   onSaveLimit,
-  onCreateKey
+  onCreateKey,
+  plans,
+  onChangeSubscription
 }: {
   user: User;
   keys: VpnKey[];
@@ -33,6 +36,8 @@ export function UserCard({
   onRestore: () => void;
   onSaveLimit: (value: number) => Promise<void>;
   onCreateKey: (name: string) => Promise<void>;
+  plans: Plan[];
+  onChangeSubscription: (change: SubscriptionChange) => Promise<void>;
 }) {
   const live = keys.filter((key) => key.status !== "revoked");
   const active = live.filter((key) => key.status === "active").length;
@@ -115,6 +120,15 @@ export function UserCard({
           ))}
         </dl>
 
+        <SubscriptionForm
+          key={`${user.id}-${user.paid_until}`}
+          user={user}
+          plans={plans}
+          onChange={onChangeSubscription}
+        />
+
+        <Separator />
+
         <TrafficChart load={loadTraffic} />
 
         <Separator />
@@ -123,7 +137,9 @@ export function UserCard({
           <LimitForm key={`${user.id}-${user.key_limit}`} user={user} onSave={onSaveLimit} />
           <div className="grid content-start gap-2">
             <Label>Новый ключ</Label>
-            {user.status === "approved" ? (
+            {user.status === "approved" && !user.subscription_active ? (
+              <p className="text-sm leading-9 text-muted-foreground">Подписка закончилась — сначала продлите.</p>
+            ) : user.status === "approved" ? (
               <CreateKeyForm key={user.id} placeholder="Название устройства" submitLabel="Добавить" onCreate={onCreateKey} />
             ) : (
               <p className="text-sm leading-9 text-muted-foreground">

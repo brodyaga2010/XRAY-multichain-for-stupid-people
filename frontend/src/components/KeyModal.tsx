@@ -57,7 +57,7 @@ function Fold({ title, children }: { title: string; children: ReactNode }) {
 
 export function KeyModal({ keyItem, onClose }: { keyItem: VpnKey; onClose: () => void }) {
   const isPhone = useMediaQuery("(max-width: 640px)");
-  const disabled = keyItem.status === "suspended";
+  const disabled = keyItem.status === "suspended" || keyItem.status === "expired";
   const primaryLink = keyItem.links.find((link) => link.transport === "tcp") ?? keyItem.links[0];
   const fallbackLinks = keyItem.links.filter((link) => link !== primaryLink);
 
@@ -77,7 +77,11 @@ export function KeyModal({ keyItem, onClose }: { keyItem: VpnKey; onClose: () =>
           </DialogTitle>
         </DialogHeader>
         {disabled ? (
-          <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">Ключ отключён администратором</p>
+          <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+            {keyItem.status === "expired"
+              ? "Подписка закончилась — ключ снова заработает после продления"
+              : "Ключ отключён администратором"}
+          </p>
         ) : (
           <>
             {primaryLink ? (

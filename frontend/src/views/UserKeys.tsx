@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { CreateKeyForm } from "@/components/CreateKeyForm";
 import { KeyTable } from "@/components/KeyTable";
 import { SearchBox } from "@/components/SearchBox";
+import { SubscriptionBanner } from "@/components/SubscriptionBanner";
 import { SubscriptionPanel } from "@/components/SubscriptionPanel";
 import { TrafficChart } from "@/components/TrafficChart";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,6 +33,8 @@ export function UserKeys({
 
   const activeCount = useMemo(() => keys.filter((key) => key.status === "active").length, [keys]);
   const limitReached = activeCount >= user.key_limit;
+  const expired = !user.subscription_active;
+  const canAdd = !limitReached && !expired;
   const showSearch = isAdmin || keys.length > SEARCH_THRESHOLD;
   const filteredKeys = useMemo(
     () => (showSearch ? keys.filter((key) => matchesSearch([key.name, key.owner_email, key.status, key.uuid], query)) : keys),
@@ -112,9 +115,11 @@ export function UserKeys({
         Ключ привязывается к одному устройству. Назовите устройство (например, «Телефон») — и мы создадим ключ для
         подключения.
       </p>
-      <div className="w-full max-w-md">
-        <CreateKeyForm onCreate={createKey} autoFocus />
-      </div>
+      {!expired && (
+        <div className="w-full max-w-md">
+          <CreateKeyForm onCreate={createKey} autoFocus />
+        </div>
+      )}
     </div>
   );
 
@@ -139,9 +144,9 @@ export function UserKeys({
           keys.length > 0 && (
             <Button
               variant={formOpen ? "secondary" : "default"}
-              disabled={limitReached}
+              disabled={!canAdd}
               aria-expanded={formOpen}
-              title={limitReached ? "Достигнут лимит ключей" : undefined}
+              title={expired ? "Подписка закончилась" : limitReached ? "Достигнут лимит ключей" : undefined}
               onClick={() => setFormOpen((current) => !current)}
             >
               <Plus />
@@ -151,12 +156,13 @@ export function UserKeys({
         }
         beforeList={
           <>
-            {limitReached && keys.length > 0 && (
+            <SubscriptionBanner user={user} />
+            {limitReached && !expired && keys.length > 0 && (
               <p className="text-sm text-muted-foreground">
                 Достигнут лимит: {user.key_limit}. Отзовите ненужный ключ, чтобы добавить новое устройство.
               </p>
             )}
-            {formOpen && !limitReached && keys.length > 0 && <CreateKeyForm onCreate={createKey} autoFocus />}
+            {formOpen && canAdd && keys.length > 0 && <CreateKeyForm onCreate={createKey} autoFocus />}
           </>
         }
         search={showSearch && <SearchBox value={query} onChange={setQuery} placeholder="Поиск устройств" />}

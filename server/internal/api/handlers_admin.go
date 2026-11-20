@@ -289,7 +289,7 @@ func (a *App) adminAudit(w http.ResponseWriter, r *http.Request) error {
 
 // auditCategories — группы действий для фильтра журнала.
 var auditCategories = map[string]struct{ include, exclude []string }{
-	"users":   {include: []string{"user.%", "subscription.%"}, exclude: []string{"user.password_change"}},
+	"users":   {include: []string{"user.%", "subscription.%", "plan.%"}, exclude: []string{"user.password_change"}},
 	"keys":    {include: []string{"key.%", "admin.key.%"}},
 	"account": {include: []string{"user.password_change", "auth.%"}},
 }

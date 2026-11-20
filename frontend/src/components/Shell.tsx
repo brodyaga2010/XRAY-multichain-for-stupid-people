@@ -70,6 +70,11 @@ export function Shell({ user, onUserChange }: { user: User; onUserChange: (user:
     void loadStatus();
   }, []);
   useAutoRefresh(loadStatus);
+  // Подписка, лимит и статус меняются администратором и по сроку — подтягиваем, не перерисовывая без изменений.
+  useAutoRefresh(async () => {
+    const { user: fresh } = await api.me();
+    if (JSON.stringify(fresh) !== JSON.stringify(user)) onUserChange(fresh);
+  });
 
   async function logout() {
     await api.logout().catch(() => undefined);

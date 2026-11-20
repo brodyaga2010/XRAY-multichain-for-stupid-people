@@ -21,7 +21,14 @@ const actionLabels: Record<string, string> = {
   "user.suspend": "Пользователь заблокирован",
   "user.restore": "Пользователь восстановлен",
   "user.limit_update": "Изменён лимит",
-  "user.password_change": "Смена пароля"
+  "user.password_change": "Смена пароля",
+  "subscription.assign": "Назначен тариф",
+  "subscription.update": "Изменена подписка",
+  "subscription.extend": "Подписка продлена",
+  "subscription.expire": "Подписка закончилась",
+  "plan.create": "Создан тариф",
+  "plan.update": "Изменён тариф",
+  "plan.delete": "Удалён тариф"
 };
 
 type AuditSort = "date" | "actor" | "action" | "target";
@@ -117,6 +124,10 @@ export function AuditLog({ setError }: { setError: (error: string) => void }) {
     if (entry.target_type === "vpn_key") {
       const key = keyById.get(id);
       if (key) return `Ключ «${keyTitle(key)}»`;
+    }
+    if (entry.target_type === "plan") {
+      const name = entry.audit_metadata?.name;
+      return typeof name === "string" ? `Тариф «${name}»` : `Тариф #${id}`;
     }
     if (entry.target_type === "user") {
       const user = userById.get(id);

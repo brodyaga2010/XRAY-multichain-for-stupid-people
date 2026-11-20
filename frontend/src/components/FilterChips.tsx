@@ -21,7 +21,7 @@ export function FilterChips<T extends string>({
 }) {
   return (
     <Tabs value={value} onValueChange={(next) => onChange(next as T)} className={cn("min-w-0", className)}>
-      <TabsList aria-label={label} className={cn("w-full max-w-full scrollbar-none overflow-x-auto", !compact && "sm:w-fit")}>
+      <TabsList aria-label={label} className={cn("w-full max-w-full justify-start scrollbar-none overflow-x-auto", !compact && "sm:w-fit")}>
         {options.map((item) => (
           <TabsTrigger key={item.id} value={item.id} className={compact ? "px-1 text-xs" : "gap-1 px-0.5 text-xs sm:gap-1.5 sm:px-3 sm:text-sm"}>
             {item.label}

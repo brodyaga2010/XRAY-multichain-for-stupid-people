@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
-import { Check, ChevronRight, X } from "lucide-react";
-import { api, BulkAction, User, UserStatus, VpnKey } from "@/api";
+import { CalendarPlus, Check, ChevronRight, Tags, X } from "lucide-react";
+import { api, BulkAction, Plan, PlanInput, SubscriptionChange, User, UserStatus, VpnKey } from "@/api";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { FilterChips } from "@/components/FilterChips";
 import { KeyTable } from "@/components/KeyTable";
+import { PlansManager } from "@/components/PlansManager";
 import { SearchBox } from "@/components/SearchBox";
 import { SortableHead } from "@/components/SortableHead";
 import { StatusBadge } from "@/components/StatusBadge";
+import { SubscriptionSummary } from "@/components/SubscriptionForm";
 import { UserAvatar } from "@/components/UserAvatar";
 import { UserCard } from "@/components/UserCard";
 import { Button } from "@/components/ui/button";
@@ -16,28 +18,36 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAutoRefresh, useMediaQuery } from "@/hooks";
 import { SortColumn, timeOf, useSort } from "@/lib/sort";
+import { paidUntilOrder } from "@/lib/subscription";
 import { cn } from "@/lib/utils";
 import { formatBytes, formatDate, formatSeen, matchesSearch } from "@/utils";
 
-type UserFilter = "all" | UserStatus;
+/** expired — подписка закончилась (у подтверждённых и заблокированных). */
+type UserFilter = "all" | UserStatus | "expired";
 
 const userFilters: Array<{ id: UserFilter; label: string }> = [
   { id: "all", label: "Все" },
   { id: "pending", label: "Ждут" },
   { id: "approved", label: "Подтверждены" },
+  { id: "expired", label: "Истекла" },
   { id: "suspended", label: "Заблокированы" }
 ];
+
+const isExpired = (user: User) => user.status !== "pending" && !user.subscription_active;
+const matchesFilter = (user: User, filter: UserFilter) =>
+  filter === "all" || (filter === "expired" ? isExpired(user) : user.status === filter);
 
 /** Пользователь со сводкой по его ключам (отозванные не считаются). */
 type UserRow = User & { activeKeys: number; online: number; traffic: number; lastSeen: string | null };
 
-type UserSort = "email" | "status" | "keys" | "traffic" | "activity" | "created";
+type UserSort = "email" | "status" | "subscription" | "keys" | "traffic" | "activity" | "created";
 
 const statusOrder: Record<UserStatus, number> = { pending: 0, approved: 1, suspended: 2 };
 
 const userColumns: Record<UserSort, SortColumn<UserRow>> = {
   email: { value: (user) => user.email },
   status: { value: (user) => statusOrder[user.status] },
+  subscription: { value: (user) => (user.status === "pending" ? null : paidUntilOrder(user)) },
   keys: { value: (user) => user.activeKeys, firstDir: "desc" },
   traffic: { value: (user) => user.traffic, firstDir: "desc" },
   activity: { value: (user) => (user.online > 0 ? Number.MAX_SAFE_INTEGER : timeOf(user.lastSeen)), firstDir: "desc" },
@@ -69,7 +79,8 @@ function toRows(users: User[], keys: VpnKey[]): UserRow[] {
 }
 
 /** Кому из выбранных подходит действие: подтвердить — ждущих, восстановить — заблокированных,
- *  заблокировать — всех, кроме уже заблокированных и самого администратора. */
+ *  заблокировать — всех, кроме уже заблокированных и самого администратора;
+ *  продлить — не ждущих, у кого подписка не бессрочная. */
 function bulkTargets(users: User[], action: BulkAction, selfId: number) {
   switch (action) {
     case "approve":
@@ -78,6 +89,8 @@ function bulkTargets(users: User[], action: BulkAction, selfId: number) {
       return users.filter((user) => user.status === "suspended");
     case "suspend":
       return users.filter((user) => user.status !== "suspended" && user.id !== selfId);
+    case "extend":
+      return users.filter((user) => user.status !== "pending" && user.paid_until !== null);
   }
 }
 
@@ -92,6 +105,8 @@ export function AdminUsers({
 }) {
   const [users, setUsers] = useState<User[]>([]);
   const [allKeys, setAllKeys] = useState<VpnKey[]>([]);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [plansOpen, setPlansOpen] = useState(false);
   const [openId, setOpenId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<UserFilter>("all");
@@ -108,17 +123,20 @@ export function AdminUsers({
     [rows, query]
   );
   const matchingRows = useMemo(
-    () => (filter === "all" ? searchedRows : searchedRows.filter((user) => user.status === filter)),
+    () => searchedRows.filter((user) => matchesFilter(user, filter)),
     [searchedRows, filter]
   );
   // Счётчики в фильтрах учитывают поиск; «Все» — сколько видно во вкладке «Все».
-  const filterOptions = userFilters.map((item) => ({
-    ...item,
-    count:
-      item.id === "all"
-        ? searchedRows.filter((user) => showSuspended || user.status !== "suspended").length
-        : searchedRows.filter((user) => user.status === item.id).length
-  }));
+  // «Истекла» показываем, только когда такие есть (или фильтр уже выбран).
+  const filterOptions = userFilters
+    .map((item) => ({
+      ...item,
+      count:
+        item.id === "all"
+          ? searchedRows.filter((user) => showSuspended || user.status !== "suspended").length
+          : searchedRows.filter((user) => matchesFilter(user, item.id)).length
+    }))
+    .filter((item) => item.id !== "expired" || item.count > 0 || filter === "expired");
   // В «Все» заблокированные спрятаны под ссылкой, чтобы не мешали; во вкладке «Заблокированы» видны всегда.
   const suspendedCount = filter === "all" ? matchingRows.filter((user) => user.status === "suspended").length : 0;
   const visibleRows = useMemo(
@@ -133,6 +151,7 @@ export function AdminUsers({
   const toApprove = bulkTargets(checkedUsers, "approve", currentUser.id);
   const toSuspend = bulkTargets(checkedUsers, "suspend", currentUser.id);
   const toRestore = bulkTargets(checkedUsers, "restore", currentUser.id);
+  const toExtend = bulkTargets(checkedUsers, "extend", currentUser.id);
   const onlyPendingToSuspend = toSuspend.every((user) => user.status === "pending");
 
   const openUser = users.find((user) => user.id === openId) ?? null;
@@ -147,9 +166,10 @@ export function AdminUsers({
   }, [visibleRows]);
 
   async function load() {
-    const [loadedUsers, loadedKeys] = await Promise.all([api.adminUsers(), api.adminKeys()]);
+    const [loadedUsers, loadedKeys, loadedPlans] = await Promise.all([api.adminUsers(), api.adminKeys(), api.adminPlans()]);
     setUsers(loadedUsers);
     setAllKeys(loadedKeys);
+    setPlans(loadedPlans);
   }
 
   useEffect(() => {
@@ -211,7 +231,8 @@ export function AdminUsers({
     setError("");
     setBusy(true);
     try {
-      const result = await api.bulkUsers(action, targets.map((user) => user.id));
+      const ids = targets.map((user) => user.id);
+      const result = await api.bulkUsers(action, ids, action === "extend" ? 1 : undefined);
       setChecked(new Set());
       if (result.failed.length > 0) {
         const emails = result.failed.map((item) => item.email).join(", ");
@@ -223,6 +244,15 @@ export function AdminUsers({
       setBusy(false);
     }
     await load().catch((err) => setError(err.message));
+  }
+
+  async function savePlan(plan: PlanInput, id?: number) {
+    await api.savePlan(plan, id);
+    await load();
+  }
+
+  async function changeSubscription(userId: number, change: SubscriptionChange) {
+    await mutate(() => api.updateSubscription(userId, change), "Не удалось изменить подписку");
   }
 
   async function createKey(userId: number, name: string) {
@@ -260,6 +290,8 @@ export function AdminUsers({
       </div>
     );
 
+  const planName = (user: User) => plans.find((plan) => plan.id === user.plan_id)?.name ?? null;
+
   const userNote = (user: UserRow) =>
     user.id === currentUser.id ? "это вы" : user.role === "admin" ? "администратор" : null;
 
@@ -281,8 +313,12 @@ export function AdminUsers({
         <CardContent className="@container grid gap-4">
           <div className="flex min-w-0 flex-col-reverse gap-3 md:flex-row md:items-center md:justify-between">
             <FilterChips label="Фильтр по статусу" options={filterOptions} value={filter} onChange={setFilter} className="md:shrink-0" />
-            <div className="min-w-0 md:w-72">
-              <SearchBox value={query} onChange={setQuery} placeholder="Почта, статус, роль" />
+            <div className="flex min-w-0 gap-2">
+              <SearchBox value={query} onChange={setQuery} placeholder="Почта, статус, роль" className="min-w-0 flex-1 md:w-72 md:flex-initial" />
+              <Button variant="outline" onClick={() => setPlansOpen(true)}>
+                <Tags />
+                Тарифы
+              </Button>
             </div>
           </div>
 
@@ -323,6 +359,12 @@ export function AdminUsers({
                         Восстановить · {toRestore.length}
                       </Button>
                     )}
+                    {toExtend.length > 0 && (
+                      <Button variant="outline" disabled={busy} onClick={() => runBulk("extend", toExtend)}>
+                        <CalendarPlus />
+                        +1 мес · {toExtend.length}
+                      </Button>
+                    )}
                     {toSuspend.length > 0 && (
                       <Button variant="destructive" disabled={busy} onClick={() => runBulk("suspend", toSuspend)}>
                         <X />
@@ -359,16 +401,19 @@ export function AdminUsers({
                       <SortableHead column="status" sort={sort} onSort={toggle}>
                         Статус
                       </SortableHead>
+                      <SortableHead column="subscription" sort={sort} onSort={toggle}>
+                        Подписка
+                      </SortableHead>
                       <SortableHead column="keys" sort={sort} onSort={toggle}>
                         Ключи
                       </SortableHead>
-                      <SortableHead column="traffic" sort={sort} onSort={toggle}>
+                      <SortableHead column="traffic" sort={sort} onSort={toggle} className="hidden @5xl:table-cell">
                         Трафик
                       </SortableHead>
                       <SortableHead column="activity" sort={sort} onSort={toggle}>
                         Активность
                       </SortableHead>
-                      <SortableHead column="created" sort={sort} onSort={toggle} className="hidden @5xl:table-cell">
+                      <SortableHead column="created" sort={sort} onSort={toggle} className="hidden @6xl:table-cell">
                         Регистрация
                       </SortableHead>
                       <TableHead className="w-0" />
@@ -403,13 +448,23 @@ export function AdminUsers({
                         <TableCell>
                           <StatusBadge status={user.status} kind="user" />
                         </TableCell>
+                        <TableCell className="text-sm tabular-nums">
+                          {user.status === "pending" ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            <div className="grid">
+                              <SubscriptionSummary user={user} short />
+                              {planName(user) && <span className="text-xs text-muted-foreground">{planName(user)}</span>}
+                            </div>
+                          )}
+                        </TableCell>
                         <TableCell className="tabular-nums">
                           {user.activeKeys}
                           <span className="text-muted-foreground"> / {user.key_limit}</span>
                         </TableCell>
-                        <TableCell className="tabular-nums">{user.traffic > 0 ? formatBytes(user.traffic) : "—"}</TableCell>
+                        <TableCell className="hidden tabular-nums @5xl:table-cell">{user.traffic > 0 ? formatBytes(user.traffic) : "—"}</TableCell>
                         <TableCell>{activity(user)}</TableCell>
-                        <TableCell className="hidden text-muted-foreground tabular-nums @5xl:table-cell">{formatDate(user.created_at)}</TableCell>
+                        <TableCell className="hidden text-muted-foreground tabular-nums @6xl:table-cell">{formatDate(user.created_at)}</TableCell>
                         <TableCell className="pr-3">
                           <div className="flex justify-end">
                             {quickActions(user) || <ChevronRight className="size-4 text-muted-foreground" />}
@@ -453,6 +508,7 @@ export function AdminUsers({
                               {user.traffic > 0 && ` · ${formatBytes(user.traffic)}`}
                             </span>
                           )}
+                          {user.status !== "pending" && user.paid_until && <SubscriptionSummary user={user} short />}
                           {userNote(user) && <span>{userNote(user)}</span>}
                         </span>
                       </div>
@@ -495,6 +551,8 @@ export function AdminUsers({
                 onRestore={() => mutate(() => api.restoreUser(openUser.id))}
                 onSaveLimit={(value) => mutate(() => api.updateLimit(openUser.id, value))}
                 onCreateKey={(name) => createKey(openUser.id, name)}
+                plans={plans}
+                onChangeSubscription={(change) => changeSubscription(openUser.id, change)}
               />
               <KeyTable
                 keys={openKeys}
@@ -505,6 +563,22 @@ export function AdminUsers({
               </div>
             </div>
           )}
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={plansOpen} onOpenChange={setPlansOpen}>
+        <SheetContent className="w-full gap-0 bg-background p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-lg">
+          <SheetHeader className="border-b px-4 py-3 pr-12">
+            <SheetTitle>Тарифы</SheetTitle>
+            <SheetDescription className="sr-only">Лимиты ключей и сроки подписки</SheetDescription>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <PlansManager
+              plans={plans}
+              onSave={savePlan}
+              onDelete={(plan) => mutate(() => api.deletePlan(plan.id), "Не удалось удалить тариф")}
+            />
+          </div>
         </SheetContent>
       </Sheet>
     </>
