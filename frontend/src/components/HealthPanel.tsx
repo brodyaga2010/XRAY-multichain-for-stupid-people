@@ -1,11 +1,11 @@
-import { PointerEvent as ReactPointerEvent, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { CheckStatus, MonitorPoint, MonitorStatus } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { DAY_MS, formatSeconds, LatencyBar, latencyBars } from "@/lib/latency";
 import { cn } from "@/lib/utils";
 import { formatDateTime, formatDuration, formatTime } from "@/utils";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_INCIDENTS = 5;
 
 const STATUS_TEXT: Record<CheckStatus, string> = {
@@ -38,111 +38,93 @@ export function overall(status: MonitorStatus): { tone: CheckStatus; text: strin
   return { tone: "ok", text: "Всё работает" };
 }
 
-function seconds(ms: number) {
-  return `${(ms / 1000).toFixed(2).replace(".", ",")} с`;
-}
-
 function Dot({ status }: { status: CheckStatus }) {
   return <span className={cn("mt-1.5 size-2 shrink-0 rounded-full", dotClass[status])} />;
 }
 
-/** Задержка цепочки за сутки: линия по удачным проверкам, красные полосы — проверки без ответа. */
+/** Задержка цепочки за сутки по получасам — как график трафика; красный столбик — были проверки без ответа. */
 function LatencyChart({ points, now }: { points: MonitorPoint[]; now: number }) {
-  const [hover, setHover] = useState<MonitorPoint | null>(null);
-  const width = 600;
-  const height = 120;
-  const from = now - DAY_MS;
+  const [hover, setHover] = useState<LatencyBar | null>(null);
+  const { bars, from, scale, avg } = useMemo(() => latencyBars(points, now), [points, now]);
+  const empty = bars.every((bar) => bar.checks === 0);
 
-  const { yMax, segments, failures, parsed } = useMemo(() => {
-    const parsed = points.map((point) => ({ point, t: new Date(point.at).getTime() })).filter(({ t }) => t >= from);
-    const values = parsed.flatMap(({ point }) => (point.ms != null ? [point.ms] : []));
-    const peak = values.length ? Math.max(...values) : 0;
-    const yMax = Math.max(1000, Math.ceil(peak / 500) * 500);
-    const x = (t: number) => ((t - from) / DAY_MS) * width;
-    const y = (ms: number) => height - (Math.min(ms, yMax) / yMax) * height;
-
-    const segments: string[] = [];
-    let current: string[] = [];
-    for (const { point, t } of parsed) {
-      if (point.ms == null || point.status === "fail") {
-        if (current.length) segments.push(current.join(" "));
-        current = [];
-        continue;
-      }
-      current.push(`${x(t).toFixed(1)},${y(point.ms).toFixed(1)}`);
-    }
-    if (current.length) segments.push(current.join(" "));
-    const failures = parsed.filter(({ point }) => point.status === "fail").map(({ t }) => x(t));
-    return { yMax, segments, failures, parsed };
-  }, [points, from]);
-
-  function onMove(event: ReactPointerEvent<SVGSVGElement>) {
-    if (!parsed.length) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const t = from + ((event.clientX - rect.left) / rect.width) * DAY_MS;
-    let best = parsed[0];
-    for (const item of parsed) {
-      if (Math.abs(item.t - t) < Math.abs(best.t - t)) best = item;
-    }
-    setHover(Math.abs(best.t - t) < 15 * 60 * 1000 ? best.point : null);
+  function details(bar: LatencyBar) {
+    if (bar.checks === 0) return "нет данных";
+    const parts: string[] = [];
+    if (bar.avg != null) parts.push(`в среднем ${formatSeconds(bar.avg)}`);
+    if (bar.peak != null && bar.peak - (bar.avg ?? 0) >= 10) parts.push(`пик ${formatSeconds(bar.peak)}`);
+    if (bar.failed) parts.push(`без ответа ${bar.failed} из ${bar.checks}`);
+    return parts.join(" · ");
   }
 
   return (
-    <div className="relative grid gap-1.5">
-      <div className="flex justify-between gap-3 text-xs text-muted-foreground tabular-nums">
-        <span>Задержка цепочки за сутки</span>
+    <div className="grid gap-2">
+      <h3 className="text-sm font-medium">Задержка цепочки за сутки</h3>
+      <div className="flex flex-wrap justify-between gap-x-3 text-xs text-muted-foreground tabular-nums">
         <span className={cn(hover && "font-medium text-foreground")}>
           {hover
-            ? `${formatTime(hover.at)} · ${hover.ms != null && hover.status !== "fail" ? seconds(hover.ms) : "нет ответа"}`
-            : `шкала до ${seconds(yMax)}`}
+            ? `${formatTime(new Date(hover.start))}–${formatTime(new Date(hover.end))}`
+            : avg != null
+              ? `В среднем ${formatSeconds(avg)}`
+              : "Данных пока нет"}
+        </span>
+        <span className={cn(hover && "font-medium text-foreground", hover?.failed && "text-destructive")}>
+          {hover ? details(hover) : `шкала до ${formatSeconds(scale)}`}
         </span>
       </div>
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        preserveAspectRatio="none"
-        role="img"
-        aria-label="График задержки цепочки за 24 часа"
-        className="block h-24 w-full touch-pan-y rounded-lg bg-muted/50"
-        onPointerMove={onMove}
-        onPointerLeave={() => setHover(null)}
-      >
-        {[0.25, 0.5, 0.75].map((share) => (
-          <line
-            key={share}
-            x1={0}
-            x2={width}
-            y1={height * share}
-            y2={height * share}
-            className="stroke-border"
-            strokeWidth={1}
-            vectorEffect="non-scaling-stroke"
-          />
-        ))}
-        {failures.map((fx, index) => (
-          <rect key={index} x={fx - 2} width={4} y={0} height={height} className="fill-destructive/40" />
-        ))}
-        {segments.map((segment, index) => (
-          <polyline
-            key={index}
-            points={segment}
-            fill="none"
-            className="stroke-primary"
-            strokeWidth={1.5}
-            strokeLinejoin="round"
-            vectorEffect="non-scaling-stroke"
-          />
-        ))}
-      </svg>
-      <div className="flex justify-between text-xs text-muted-foreground tabular-nums">
+      <div className="relative">
+        <div
+          className="flex h-24 items-stretch gap-0.5 rounded-lg bg-muted/50 px-1 pt-2"
+          onPointerLeave={() => setHover(null)}
+          aria-hidden
+        >
+          {bars.map((bar) => (
+            <div key={bar.start} className="group flex min-w-0 flex-1 cursor-default items-end" onPointerEnter={() => setHover(bar)}>
+              <div
+                className={cn(
+                  "w-full rounded-t-[4px] transition-colors",
+                  bar.failed ? "bg-destructive/70 group-hover:bg-destructive" : "bg-primary/70 group-hover:bg-primary",
+                  hover && hover.start !== bar.start && (bar.failed ? "bg-destructive/40" : "bg-primary/40"),
+                  bar.checks === 0 && "h-0.5 rounded-none bg-muted-foreground/15 group-hover:bg-muted-foreground/30"
+                )}
+                style={bar.checks ? { height: `${bar.height}%` } : undefined}
+              />
+            </div>
+          ))}
+        </div>
+        {empty && (
+          <div className="absolute inset-0 grid place-items-center px-4 text-center text-sm text-muted-foreground">
+            Данных пока нет — они копятся с запуска кабинета
+          </div>
+        )}
+      </div>
+      <div className="flex justify-between text-xs text-muted-foreground tabular-nums" aria-hidden>
         <span>{formatTime(new Date(from))}</span>
         <span>{formatTime(new Date(from + DAY_MS / 2))}</span>
         <span>сейчас</span>
       </div>
-      {parsed.length === 0 && (
-        <div className="absolute inset-x-0 top-6 bottom-6 grid place-items-center text-center text-sm text-muted-foreground">
-          Данных пока нет — они копятся с запуска кабинета
-        </div>
-      )}
+      {/* Для скринридеров — те же данные таблицей. */}
+      <table className="sr-only">
+        <caption>Задержка цепочки за сутки, по получасам</caption>
+        <thead>
+          <tr>
+            <th>Время</th>
+            <th>Задержка</th>
+          </tr>
+        </thead>
+        <tbody>
+          {bars
+            .filter((bar) => bar.checks > 0)
+            .map((bar) => (
+              <tr key={bar.start}>
+                <td>
+                  {formatTime(new Date(bar.start))}–{formatTime(new Date(bar.end))}
+                </td>
+                <td>{details(bar)}</td>
+              </tr>
+            ))}
+        </tbody>
+      </table>
     </div>
   );
 }
