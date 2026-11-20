@@ -108,7 +108,11 @@ func (s *SMTP) Send(ctx context.Context, msg Message) error {
 		}
 	}
 	if s.cfg.Username != "" {
-		if err := client.Auth(smtp.PlainAuth("", s.cfg.Username, s.cfg.Password, s.cfg.Host)); err != nil {
+		auth, err := s.auth(client)
+		if err != nil {
+			return err
+		}
+		if err := client.Auth(auth); err != nil {
 			return fmt.Errorf("почта: вход на сервер: %w", err)
 		}
 	}
@@ -129,6 +133,62 @@ func (s *SMTP) Send(ctx context.Context, msg Message) error {
 		return fmt.Errorf("почта: сервер не принял письмо: %w", err)
 	}
 	return client.Quit()
+}
+
+// auth выбирает способ входа из объявленных сервером: PLAIN, иначе LOGIN (Beget знает только LOGIN).
+func (s *SMTP) auth(client *smtp.Client) (smtp.Auth, error) {
+	_, params := client.Extension("AUTH")
+	mechs := strings.Fields(strings.ToUpper(params))
+	has := func(m string) bool {
+		for _, x := range mechs {
+			if x == m {
+				return true
+			}
+		}
+		return false
+	}
+	switch {
+	case has("PLAIN"):
+		return smtp.PlainAuth("", s.cfg.Username, s.cfg.Password, s.cfg.Host), nil
+	case has("LOGIN"):
+		return &loginAuth{username: s.cfg.Username, password: s.cfg.Password, host: s.cfg.Host}, nil
+	default:
+		return nil, fmt.Errorf("почта: вход на сервер: сервер не предлагает PLAIN или LOGIN (AUTH %s)", params)
+	}
+}
+
+// loginAuth — механизм AUTH LOGIN: сервер спрашивает «Username:» и «Password:», клиент отвечает по очереди.
+type loginAuth struct {
+	username, password, host string
+}
+
+func (a *loginAuth) Start(server *smtp.ServerInfo) (string, []byte, error) {
+	// Как и smtp.PlainAuth: пароль только по шифрованному соединению, кроме localhost.
+	if !server.TLS && !isLocalhost(server.Name) {
+		return "", nil, errors.New("незашифрованное соединение")
+	}
+	if server.Name != a.host {
+		return "", nil, errors.New("неверное имя хоста")
+	}
+	return "LOGIN", nil, nil
+}
+
+func (a *loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
+	if !more {
+		return nil, nil
+	}
+	switch prompt := strings.ToLower(strings.TrimSpace(string(fromServer))); {
+	case strings.HasPrefix(prompt, "username"):
+		return []byte(a.username), nil
+	case strings.HasPrefix(prompt, "password"):
+		return []byte(a.password), nil
+	default:
+		return nil, fmt.Errorf("неожиданный запрос сервера при входе: %q", fromServer)
+	}
+}
+
+func isLocalhost(name string) bool {
+	return name == "localhost" || name == "127.0.0.1" || name == "::1"
 }
 
 // Build собирает письмо MIME: multipart/alternative с текстом и HTML в UTF-8 (quoted-printable).

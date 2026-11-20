@@ -56,7 +56,8 @@ func TestBuild(t *testing.T) {
 }
 
 // fakeSMTP — минимальный SMTP-сервер без TLS; возвращает адрес и канал с принятыми командами и письмом.
-func fakeSMTP(t *testing.T, rejectAuth bool) (string, <-chan string) {
+// mechs — что сервер объявляет в AUTH («PLAIN», «LOGIN», «LOGIN PLAIN»).
+func fakeSMTP(t *testing.T, mechs string, rejectAuth bool) (string, <-chan string) {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -85,8 +86,16 @@ func fakeSMTP(t *testing.T, rejectAuth bool) (string, <-chan string) {
 			switch upper := strings.ToUpper(cmd); {
 			case strings.HasPrefix(upper, "EHLO"):
 				write("250-fake")
-				write("250 AUTH PLAIN")
+				write("250 AUTH " + mechs)
 			case strings.HasPrefix(upper, "AUTH"):
+				if upper == "AUTH LOGIN" {
+					for _, prompt := range []string{"Username:", "Password:"} {
+						write("334 " + base64.StdEncoding.EncodeToString([]byte(prompt)))
+						answer, _ := r.ReadString('\n')
+						decoded, _ := base64.StdEncoding.DecodeString(strings.TrimSpace(answer))
+						log.WriteString("LOGIN " + prompt + " " + string(decoded) + "\n")
+					}
+				}
 				if rejectAuth {
 					write("535 bad credentials")
 				} else {
@@ -117,15 +126,21 @@ func fakeSMTP(t *testing.T, rejectAuth bool) (string, <-chan string) {
 func TestSMTPSend(t *testing.T) {
 	tests := []struct {
 		name       string
+		mechs      string
 		rejectAuth bool
+		wantAuth   []string
 		wantErr    string
 	}{
-		{"письмо принято", false, ""},
-		{"неверный пароль", true, "вход на сервер"},
+		{"PLAIN", "PLAIN", false, []string{"AUTH PLAIN " + base64.StdEncoding.EncodeToString([]byte("\x00noreply@example.com\x00secret"))}, ""},
+		{"только LOGIN, как у Beget", "LOGIN", false, []string{"AUTH LOGIN", "LOGIN Username: noreply@example.com", "LOGIN Password: secret"}, ""},
+		{"оба — берём PLAIN", "LOGIN PLAIN", false, []string{"AUTH PLAIN "}, ""},
+		{"неверный пароль", "PLAIN", true, nil, "вход на сервер"},
+		{"неверный пароль через LOGIN", "LOGIN", true, nil, "вход на сервер"},
+		{"нет общего способа входа", "CRAM-MD5", false, nil, "не предлагает PLAIN или LOGIN"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			addr, got := fakeSMTP(t, tt.rejectAuth)
+			addr, got := fakeSMTP(t, tt.mechs, tt.rejectAuth)
 			host, port, _ := net.SplitHostPort(addr)
 			p, _ := strconv.Atoi(port)
 			s, err := NewSMTP(SMTPConfig{Host: host, Port: p, Username: "noreply@example.com", Password: "secret", From: "noreply@example.com", FromName: "Кабинет"})
@@ -145,8 +160,7 @@ func TestSMTPSend(t *testing.T) {
 				t.Fatal(err)
 			}
 			log := <-got
-			auth := base64.StdEncoding.EncodeToString([]byte("\x00noreply@example.com\x00secret"))
-			for _, want := range []string{"AUTH PLAIN " + auth, "MAIL FROM:<noreply@example.com>", "RCPT TO:<user@example.com>", "Subject: =?utf-8?q?"} {
+			for _, want := range append(tt.wantAuth, "MAIL FROM:<noreply@example.com>", "RCPT TO:<user@example.com>", "Subject: =?utf-8?q?") {
 				if !strings.Contains(log, want) {
 					t.Errorf("нет %q в диалоге:\n%s", want, log)
 				}
