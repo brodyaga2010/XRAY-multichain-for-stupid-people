@@ -59,6 +59,15 @@ func escapePath(path string) string {
 // Close закрывает базу.
 func (s *Store) Close() error { return s.db.Close() }
 
+// BackupTo сохраняет согласованную копию базы в новый файл path (VACUUM INTO): работает на живой базе,
+// не блокируя запись надолго; файл path не должен существовать.
+func (s *Store) BackupTo(ctx context.Context, path string) error {
+	if _, err := s.db.ExecContext(ctx, "VACUUM INTO ?", path); err != nil {
+		return fmt.Errorf("копия базы: %w", err)
+	}
+	return nil
+}
+
 // DB — низкоуровневый доступ (тесты, миграции).
 func (s *Store) DB() *sql.DB { return s.db }
 

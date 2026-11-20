@@ -30,3 +30,18 @@ func TestParseArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestBackupLabel(t *testing.T) {
+	tests := []struct{ host, want string }{
+		{"kemsekov.ru", "kemsekov"},
+		{"vpn.example.com", "vpn"},
+		{"localhost", "localhost"},
+		{"203.0.113.10", ""},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		if got := backupLabel(tt.host); got != tt.want {
+			t.Errorf("backupLabel(%q) = %q, want %q", tt.host, got, tt.want)
+		}
+	}
+}

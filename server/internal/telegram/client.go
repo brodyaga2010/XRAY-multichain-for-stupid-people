@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strings"
@@ -114,11 +115,15 @@ func (c *Client) call(ctx context.Context, method string, params, result any) er
 	if err != nil {
 		return err
 	}
+	return c.post(ctx, method, "application/json", body, result)
+}
+
+func (c *Client) post(ctx context.Context, method, contentType string, body []byte, result any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+method, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("telegram %s: некорректный адрес API", method)
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", contentType)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		// url.Error содержит адрес с токеном — в логи идёт только причина
@@ -181,6 +186,29 @@ func (c *Client) EditMessageText(ctx context.Context, chatID, messageID int64, t
 // AnswerCallbackQuery закрывает «часики» на кнопке и показывает короткое уведомление.
 func (c *Client) AnswerCallbackQuery(ctx context.Context, id, text string) error {
 	return c.call(ctx, "answerCallbackQuery", map[string]any{"callback_query_id": id, "text": text}, nil)
+}
+
+// SendDocument отправляет файл с подписью (HTML). Лимит Bot API — 50 МБ.
+func (c *Client) SendDocument(ctx context.Context, chatID int64, filename string, data []byte, caption string) error {
+	var body bytes.Buffer
+	form := multipart.NewWriter(&body)
+	fields := map[string]string{"chat_id": fmt.Sprint(chatID), "caption": caption, "parse_mode": "HTML"}
+	for name, value := range fields {
+		if err := form.WriteField(name, value); err != nil {
+			return err
+		}
+	}
+	part, err := form.CreateFormFile("document", filename)
+	if err != nil {
+		return err
+	}
+	if _, err := part.Write(data); err != nil {
+		return err
+	}
+	if err := form.Close(); err != nil {
+		return err
+	}
+	return c.post(ctx, "sendDocument", form.FormDataContentType(), body.Bytes(), nil)
 }
 
 // DeleteMyCommands убирает меню команд бота (вместо команд — кнопка под полем ввода).

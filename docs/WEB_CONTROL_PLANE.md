@@ -198,6 +198,7 @@ make web-reset               # вернуть заглушку интерфей�
 | `XRAY_XHTTP_PORT` | `2053` | порт XHTTP inbound |
 | `STATS_POLL_SECONDS`, `ONLINE_WINDOW_SECONDS` | `15`, `60` | сбор статистики и окно «онлайн» |
 | `TELEGRAM_BOT_TOKEN` | — | токен бота от @BotFather; пусто — бот выключен |
+| `BACKUP_HOUR` | `4` | час (по `TZ`) ежедневной копии базы в чат администратора; `-1` — выключено |
 | `TELEGRAM_ADMIN_CHAT_IDS` | — | chat id администраторов через запятую |
 | `TELEGRAM_API_URL` | `https://api.telegram.org` | адрес Bot API (например, свой прокси) |
 | `TZ` | время сервера | часовой пояс в сообщениях бота, например `Europe/Moscow` |
@@ -243,7 +244,14 @@ SQLite, таблицы `users`, `vpn_keys`, `audit_logs` и служебная `
 прежней Python-версией (ревизия `0002_panel_v2`), поэтому обновление не требует переноса данных:
 `serve` при старте сам выполняет `migrate`. Пароли — bcrypt.
 
-Резервная копия — просто файл: `sqlite3 /var/lib/xray-panel/panel.db ".backup /root/panel.db"`.
+Каждый день в `BACKUP_HOUR` (по умолчанию в 4:00 по `TZ`) кабинет снимает согласованную копию базы
+(`VACUUM INTO`, без остановки), сжимает gzip и присылает файлом в чат администратора Telegram-бота;
+команда боту `/backup` делает копию сразу. Если копия не получилась, бот присылает тревогу.
+В копии — хеши паролей и ключи доступа, поэтому чат администратора должен быть личным.
+
+Восстановление: `gunzip panel-….db.gz`, `systemctl stop xray-panel`, заменить
+`/var/lib/xray-panel/panel.db` (владелец — пользователь сервиса), `systemctl start xray-panel`.
+Вручную копию можно снять так: `sqlite3 /var/lib/xray-panel/panel.db ".backup /root/panel.db"`.
 
 ## Диагностика
 

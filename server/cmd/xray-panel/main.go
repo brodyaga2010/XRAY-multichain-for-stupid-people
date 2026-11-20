@@ -19,6 +19,7 @@ import (
 	_ "time/tzdata" // часовой пояс из TZ работает и без /usr/share/zoneinfo
 
 	"xraypanel/internal/api"
+	"xraypanel/internal/backup"
 	"xraypanel/internal/config"
 	"xraypanel/internal/monitor"
 	"xraypanel/internal/stats"
@@ -218,7 +219,8 @@ func serve(ctx context.Context, cfg *config.Config) error {
 	} else {
 		close(monitorDone)
 	}
-	botDone := startBot(statsCtx, cfg, app, mon)
+	bot := startBot(statsCtx, cfg, app, mon)
+	backupDone := startBackup(statsCtx, cfg, st, bot)
 
 	serverErr := make(chan error, 1)
 	go func() {
@@ -231,7 +233,8 @@ func serve(ctx context.Context, cfg *config.Config) error {
 		cancelStats()
 		<-statsDone
 		<-monitorDone
-		<-botDone
+		<-bot.done
+		<-backupDone
 		return err
 	case <-ctx.Done():
 	}
@@ -242,7 +245,8 @@ func serve(ctx context.Context, cfg *config.Config) error {
 	cancelStats()
 	<-statsDone
 	<-monitorDone
-	<-botDone
+	<-bot.done
+	<-backupDone
 	return err
 }
 
@@ -305,17 +309,23 @@ func certDomains(cfg *config.Config) []string {
 
 // startBot запускает Telegram-бота, если задан TELEGRAM_BOT_TOKEN; канал закрывается после остановки.
 // mon — источник тревог и кнопки «Состояние»; nil, если мониторинг выключен.
-func startBot(ctx context.Context, cfg *config.Config, app *api.App, mon *monitor.Monitor) <-chan struct{} {
+// runningBot — запущенный бот (bot == nil, если он выключен) и канал его завершения.
+type runningBot struct {
+	bot  *telegram.Bot
+	done <-chan struct{}
+}
+
+func startBot(ctx context.Context, cfg *config.Config, app *api.App, mon *monitor.Monitor) runningBot {
 	done := make(chan struct{})
 	if cfg.TelegramBotToken == "" {
 		close(done)
-		return done
+		return runningBot{done: done}
 	}
 	chats, err := cfg.TelegramAdminChats() // формат уже проверен в config.Load
 	if err != nil {
 		slog.Error("telegram", "error", err)
 		close(done)
-		return done
+		return runningBot{done: done}
 	}
 	bot := telegram.New(telegram.NewClient(cfg.TelegramAPIURL, cfg.TelegramBotToken), chats, app)
 	app.SetNotifier(bot)
@@ -326,6 +336,33 @@ func startBot(ctx context.Context, cfg *config.Config, app *api.App, mon *monito
 	go func() {
 		defer close(done)
 		bot.Run(ctx)
+	}()
+	return runningBot{bot: bot, done: done}
+}
+
+// backupLabel — короткое имя сервера для названия файла копии: «kemsekov» из «kemsekov.ru»; для IP — пусто.
+func backupLabel(host string) string {
+	if host == "" || net.ParseIP(host) != nil {
+		return ""
+	}
+	label, _, _ := strings.Cut(host, ".")
+	return label
+}
+
+// startBackup запускает ежедневную копию базы в Telegram; без бота, при BACKUP_HOUR=-1
+// или базе в памяти копии нет.
+func startBackup(ctx context.Context, cfg *config.Config, st *store.Store, rb runningBot) <-chan struct{} {
+	done := make(chan struct{})
+	path, err := cfg.SQLitePath()
+	if rb.bot == nil || cfg.BackupHour < 0 || err != nil || path == ":memory:" {
+		close(done)
+		return done
+	}
+	b := backup.New(st, rb.bot, filepath.Dir(path), backupLabel(cfg.XrayPublicHost))
+	rb.bot.SetBackup(b.RunOnce)
+	go func() {
+		defer close(done)
+		b.Run(ctx, cfg.BackupHour)
 	}()
 	return done
 }

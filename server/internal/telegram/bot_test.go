@@ -319,3 +319,91 @@ func TestClientErrors(t *testing.T) {
 		}
 	})
 }
+
+func TestSendBackup(t *testing.T) {
+	tests := []struct {
+		name      string
+		chats     []int64
+		reply     string
+		wantErr   bool
+		wantCalls int
+	}{
+		{"два чата", []int64{1, 2}, "", false, 2},
+		{"нет чатов", nil, "", true, 0},
+		{"Telegram отказал", []int64{1}, `{"ok":false,"error_code":400,"description":"Bad Request"}`, true, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			api, client := newFakeAPI(t)
+			if tt.reply != "" {
+				api.replies["sendDocument"] = tt.reply
+			}
+			bot := New(client, tt.chats, nil)
+			bot.log = slog.New(slog.NewTextHandler(io.Discard, nil))
+
+			err := bot.SendBackup(context.Background(), "panel.db.gz", []byte("gz"), "копия")
+
+			if (err != nil) != tt.wantErr || len(api.callsOf("sendDocument")) != tt.wantCalls {
+				t.Errorf("err = %v, вызовов sendDocument = %d", err, len(api.callsOf("sendDocument")))
+			}
+		})
+	}
+}
+
+func TestSendDocumentMultipart(t *testing.T) {
+	var got struct{ chat, caption, mode, filename, data string }
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Error(err)
+		}
+		got.chat, got.caption, got.mode = r.FormValue("chat_id"), r.FormValue("caption"), r.FormValue("parse_mode")
+		f, header, err := r.FormFile("document")
+		if err == nil {
+			b, _ := io.ReadAll(f)
+			got.filename, got.data = header.Filename, string(b)
+		}
+		_, _ = io.WriteString(w, `{"ok":true,"result":{}}`)
+	}))
+	t.Cleanup(srv.Close)
+
+	err := NewClient(srv.URL, testToken).SendDocument(context.Background(), 42, "a.db.gz", []byte("DATA"), "<b>копия</b>")
+
+	if err != nil || got.chat != "42" || got.caption != "<b>копия</b>" || got.mode != "HTML" || got.filename != "a.db.gz" || got.data != "DATA" {
+		t.Errorf("err = %v, got = %+v", err, got)
+	}
+}
+
+func TestBackupCommand(t *testing.T) {
+	tests := []struct {
+		name     string
+		backup   func(context.Context) (int, error)
+		wantText string
+	}{
+		{"выключено", nil, "выключено"},
+		{"ошибка", func(context.Context) (int, error) { return 0, errors.New("x") }, "Не получилось"},
+		{"успех — без лишних сообщений", func(context.Context) (int, error) { return 10, nil }, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			api, client := newFakeAPI(t)
+			bot := New(client, []int64{7}, nil)
+			bot.log = slog.New(slog.NewTextHandler(io.Discard, nil))
+			if tt.backup != nil {
+				bot.SetBackup(tt.backup)
+			}
+
+			bot.Handle(context.Background(), Update{Message: &Message{Chat: Chat{ID: 7}, Text: "/backup"}})
+
+			sent := api.callsOf("sendMessage")
+			if tt.wantText == "" {
+				if len(sent) != 0 {
+					t.Errorf("лишние сообщения: %+v", sent)
+				}
+				return
+			}
+			if len(sent) != 1 || !strings.Contains(sent[0].Params["text"].(string), tt.wantText) {
+				t.Errorf("сообщения: %+v", sent)
+			}
+		})
+	}
+}

@@ -26,7 +26,7 @@ func TestDefaultsMatchPythonSettings(t *testing.T) {
 		XrayRestartCommand: "systemctl restart xray", XrayXHTTPPort: 2053, XrayPublicHost: "127.0.0.1", XrayProbePort: 10811,
 		StatsPollSeconds: 15, OnlineWindowSeconds: 60, ListenAddr: "127.0.0.1:8000", TelegramAPIURL: "https://api.telegram.org",
 		MonitorIntervalSeconds: 60, MonitorFailThreshold: 3, MonitorProbeURL: "https://www.google.com/generate_204",
-		MonitorChainSlowMs: 3000, MonitorExitSlowMs: 300,
+		MonitorChainSlowMs: 3000, MonitorExitSlowMs: 300, BackupHour: 4,
 	}
 	if *cfg != want {
 		t.Errorf("настройки по умолчанию:\n got %+v\nwant %+v", *cfg, want)
@@ -60,6 +60,10 @@ func TestLoadOverridesAndValidation(t *testing.T) {
 		{"плохой режим", map[string]string{"XRAY_MODE": "docker"}, nil, "XRAY_MODE"},
 		{"не число", map[string]string{"AUTH_RATE_LIMIT": "ten"}, nil, "AUTH_RATE_LIMIT"},
 		{"не bool", map[string]string{"COOKIE_SECURE": "maybe"}, nil, "COOKIE_SECURE"},
+		{"копия выключена", map[string]string{"BACKUP_HOUR": "-1"}, func(c *Config) bool { return c.BackupHour == -1 }, ""},
+		{"копия в полночь", map[string]string{"BACKUP_HOUR": "0"}, func(c *Config) bool { return c.BackupHour == 0 }, ""},
+		{"час больше 23", map[string]string{"BACKUP_HOUR": "24"}, nil, "BACKUP_HOUR"},
+		{"час меньше -1", map[string]string{"BACKUP_HOUR": "-2"}, nil, "BACKUP_HOUR"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

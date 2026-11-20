@@ -61,6 +61,9 @@ type Config struct {
 	MonitorProbeURL        string
 	MonitorChainSlowMs     int
 	MonitorExitSlowMs      int
+
+	// Ежедневная копия базы в чат администратора Telegram: час по местному времени (TZ); -1 — выключено.
+	BackupHour int
 }
 
 // DefaultJWTSecret — значение по умолчанию, пригодное только для разработки.
@@ -101,6 +104,7 @@ func Defaults() Config {
 		MonitorProbeURL:         "https://www.google.com/generate_204",
 		MonitorChainSlowMs:      3000,
 		MonitorExitSlowMs:       300,
+		BackupHour:              4,
 	}
 }
 
@@ -183,6 +187,7 @@ func Load(lookup Lookup) (*Config, error) {
 	str(&cfg.MonitorProbeURL, "MONITOR_PROBE_URL")
 	num(&cfg.MonitorChainSlowMs, "MONITOR_CHAIN_SLOW_MS")
 	num(&cfg.MonitorExitSlowMs, "MONITOR_EXIT_SLOW_MS")
+	num(&cfg.BackupHour, "BACKUP_HOUR")
 
 	if len([]rune(cfg.JWTSecret)) < 16 {
 		errs = append(errs, "JWT_SECRET: минимум 16 символов")
@@ -194,6 +199,9 @@ func Load(lookup Lookup) (*Config, error) {
 	}
 	if _, err := cfg.TelegramAdminChats(); err != nil {
 		errs = append(errs, err.Error())
+	}
+	if cfg.BackupHour < -1 || cfg.BackupHour > 23 {
+		errs = append(errs, fmt.Sprintf("BACKUP_HOUR: час от 0 до 23 или -1 (выключено), получено %d", cfg.BackupHour))
 	}
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("некорректная конфигурация: %s", strings.Join(errs, "; "))

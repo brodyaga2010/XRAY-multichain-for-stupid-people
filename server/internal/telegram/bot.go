@@ -43,6 +43,7 @@ type Bot struct {
 	chats  []int64
 	mod    Moderator
 	status StatusSource
+	backup func(ctx context.Context) (int, error)
 	log    *slog.Logger
 
 	// Location — часовой пояс времени в сообщениях (по умолчанию time.Local, задаётся TZ).
@@ -139,6 +140,10 @@ func (b *Bot) handleMessage(ctx context.Context, msg *Message) {
 	command, _, _ = strings.Cut(command, "@") // /pending@botname в группах
 	if text == StatusButton || command == "/status" {
 		b.send(ctx, chat, b.statusText(), adminKeyboard)
+		return
+	}
+	if command == "/backup" {
+		b.runBackup(ctx, chat)
 		return
 	}
 	if text != PendingButton && command != "/pending" {
