@@ -1,9 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, AuditEntry, User, VpnKey } from "@/api";
 import { useAutoRefresh } from "@/hooks";
+import { FilterChips } from "@/components/FilterChips";
+import { SearchBox } from "@/components/SearchBox";
 import { SortableHead } from "@/components/SortableHead";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableHeader, TableCell, TableRow } from "@/components/ui/table";
+import { AUDIT_PAGE, AuditCategory, prependNew } from "@/lib/audit";
 import { SortColumn, timeOf, useSort } from "@/lib/sort";
 import { formatDateTime, keyTitle } from "@/utils";
 
@@ -24,22 +28,73 @@ type AuditSort = "date" | "actor" | "action" | "target";
 
 const actionLabel = (entry: AuditEntry) => actionLabels[entry.action] ?? entry.action;
 
+const categories: Array<{ id: AuditCategory; label: string }> = [
+  { id: "all", label: "Все" },
+  { id: "users", label: "Пользователи" },
+  { id: "keys", label: "Ключи" },
+  { id: "account", label: "Аккаунт" }
+];
+
 export function AuditLog({ setError }: { setError: (error: string) => void }) {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [keys, setKeys] = useState<VpnKey[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [category, setCategory] = useState<AuditCategory>("all");
+  const [query, setQuery] = useState("");
+  const [search, setSearch] = useState(""); // query с задержкой: запрос к серверу — когда перестали печатать
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // Ответ на устаревший фильтр не должен затереть свежий список.
+  const generation = useRef(0);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => setSearch(query), 300);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
+    const current = ++generation.current;
+    setLoading(true);
     api
-      .adminAudit(200)
-      .then(setEntries)
-      .catch((err) => setError(err.message));
+      .adminAudit({ category, q: search })
+      .then((page) => {
+        if (current !== generation.current) return;
+        setEntries(page);
+        setHasMore(page.length === AUDIT_PAGE);
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => current === generation.current && setLoading(false));
+  }, [category, search]);
+
+  useEffect(() => {
     // Справочники нужны только для подписей: если не загрузились — показываем «тип #id».
     api.adminKeys().then(setKeys).catch(() => undefined);
     api.adminUsers().then(setUsers).catch(() => undefined);
   }, []);
 
-  useAutoRefresh(() => api.adminAudit(200).then(setEntries));
+  useAutoRefresh(async () => {
+    const current = generation.current;
+    const page = await api.adminAudit({ category, q: search });
+    if (current === generation.current) setEntries((list) => prependNew(list, page));
+  });
+
+  async function loadMore() {
+    const last = entries[entries.length - 1];
+    if (!last) return;
+    const current = generation.current;
+    setLoadingMore(true);
+    try {
+      const page = await api.adminAudit({ category, q: search, before: last.id });
+      if (current !== generation.current) return;
+      setEntries((list) => [...list, ...page.filter((entry) => !list.some((item) => item.id === entry.id))]);
+      setHasMore(page.length === AUDIT_PAGE);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось загрузить записи");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   const keyById = useMemo(() => new Map(keys.map((key) => [String(key.id), key])), [keys]);
   const userById = useMemo(() => new Map(users.map((user) => [String(user.id), user])), [users]);
@@ -73,8 +128,14 @@ export function AuditLog({ setError }: { setError: (error: string) => void }) {
   return (
     <Card className="gap-4">
       <CardContent className="@container grid gap-3">
+        <div className="flex min-w-0 flex-col-reverse gap-3 md:flex-row md:items-center md:justify-between">
+          <FilterChips label="Тип действия" options={categories} value={category} onChange={setCategory} className="md:shrink-0" />
+          <SearchBox value={query} onChange={setQuery} placeholder="Почта, ключ" className="md:w-72" />
+        </div>
         {entries.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">Записей нет</p>
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            {loading ? "Загрузка…" : search || category !== "all" ? "Ничего не найдено" : "Записей нет"}
+          </p>
         ) : (
           <>
             <div className="hidden overflow-hidden rounded-lg border @3xl:block">
@@ -131,7 +192,16 @@ export function AuditLog({ setError }: { setError: (error: string) => void }) {
                 </li>
               ))}
             </ul>
-            <p className="text-xs text-muted-foreground">Последние записи: {entries.length}</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">
+                {hasMore ? `Показаны последние ${entries.length}` : `Всего записей: ${entries.length}`}
+              </p>
+              {hasMore && (
+                <Button variant="outline" disabled={loadingMore} onClick={loadMore}>
+                  {loadingMore ? "Загрузка…" : "Загрузить ещё"}
+                </Button>
+              )}
+            </div>
           </>
         )}
       </CardContent>

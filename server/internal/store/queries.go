@@ -306,12 +306,73 @@ func (q *Queries) InsertAudit(ctx context.Context, a Audit) error {
 	return err
 }
 
+// AuditFilter — выборка из журнала. Пустые поля не фильтруют.
+type AuditFilter struct {
+	Limit int
+	// BeforeID — курсор: записи старше записи с этим id (в порядке created_at DESC, id DESC).
+	BeforeID int64
+	// Actions — коды действий; элемент с «%» на конце — префикс (например, "key.%").
+	Actions []string
+	// ExcludeActions — коды, которые не показывать (точное совпадение).
+	ExcludeActions []string
+	// Query — подстрока email актора, email/имени объекта или метаданных (без учёта регистра).
+	Query string
+}
+
 // ListAudit — последние записи с email актора (created_at DESC, id DESC).
 func (q *Queries) ListAudit(ctx context.Context, limit int) ([]AuditLog, error) {
-	rows, err := q.db.QueryContext(ctx,
-		`SELECT a.id, a.actor_id, u.email, a.action, a.target_type, a.target_id, a.metadata, a.created_at
-		 FROM audit_logs a LEFT JOIN users u ON u.id = a.actor_id
-		 ORDER BY a.created_at DESC, a.id DESC LIMIT ?`, limit)
+	return q.SearchAudit(ctx, AuditFilter{Limit: limit})
+}
+
+// SearchAudit — записи журнала по фильтру, новые первыми.
+func (q *Queries) SearchAudit(ctx context.Context, f AuditFilter) ([]AuditLog, error) {
+	var (
+		where []string
+		args  []any
+	)
+	if f.BeforeID > 0 {
+		where = append(where, `(a.created_at, a.id) < (SELECT created_at, id FROM audit_logs WHERE id = ?)`)
+		args = append(args, f.BeforeID)
+	}
+	if len(f.Actions) > 0 {
+		var or []string
+		for _, action := range f.Actions {
+			if strings.HasSuffix(action, "%") {
+				or = append(or, "a.action LIKE ?")
+			} else {
+				or = append(or, "a.action = ?")
+			}
+			args = append(args, action)
+		}
+		where = append(where, "("+strings.Join(or, " OR ")+")")
+	}
+	for _, action := range f.ExcludeActions {
+		where = append(where, "a.action <> ?")
+		args = append(args, action)
+	}
+	if query := strings.TrimSpace(f.Query); query != "" {
+		// LIKE в SQLite не различает регистр только латиницы; кириллицу ищем как ввели.
+		like := "%" + escapeLike(query) + "%"
+		where = append(where, `(coalesce(u.email, '') LIKE ? ESCAPE '\'
+			OR coalesce(tu.email, '') LIKE ? ESCAPE '\'
+			OR coalesce(k.name, '') LIKE ? ESCAPE '\'
+			OR coalesce(ko.email, '') LIKE ? ESCAPE '\'
+			OR coalesce(a.metadata, '') LIKE ? ESCAPE '\')`)
+		args = append(args, like, like, like, like, like)
+	}
+	sqlText := `SELECT a.id, a.actor_id, u.email, a.action, a.target_type, a.target_id, a.metadata, a.created_at
+		 FROM audit_logs a
+		 LEFT JOIN users u ON u.id = a.actor_id
+		 LEFT JOIN users tu ON a.target_type = 'user' AND tu.id = CAST(a.target_id AS INTEGER)
+		 LEFT JOIN vpn_keys k ON a.target_type = 'vpn_key' AND k.id = CAST(a.target_id AS INTEGER)
+		 LEFT JOIN users ko ON ko.id = k.owner_id`
+	if len(where) > 0 {
+		sqlText += " WHERE " + strings.Join(where, " AND ")
+	}
+	sqlText += " ORDER BY a.created_at DESC, a.id DESC LIMIT ?"
+	args = append(args, f.Limit)
+
+	rows, err := q.db.QueryContext(ctx, sqlText, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -335,4 +396,9 @@ func (q *Queries) ListAudit(ctx context.Context, limit int) ([]AuditLog, error) 
 		entries = append(entries, e)
 	}
 	return entries, rows.Err()
+}
+
+// escapeLike экранирует спецсимволы LIKE (ESCAPE '\').
+func escapeLike(s string) string {
+	return strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(s)
 }

@@ -5,8 +5,10 @@ import (
 	"errors"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"xraypanel/internal/store"
 )
@@ -259,15 +261,11 @@ func (a *App) adminAudit(w http.ResponseWriter, r *http.Request) error {
 	if _, err := a.adminUser(r); err != nil {
 		return err
 	}
-	limit := 200
-	if raw := r.URL.Query().Get("limit"); raw != "" {
-		n, err := strconv.Atoi(raw)
-		if err != nil || n < 1 || n > 1000 {
-			return invalid("Параметр limit должен быть целым числом от 1 до 1000")
-		}
-		limit = n
+	filter, err := parseAuditFilter(r.URL.Query())
+	if err != nil {
+		return err
 	}
-	entries, err := a.st.ListAudit(r.Context(), limit)
+	entries, err := a.st.SearchAudit(r.Context(), filter)
 	if err != nil {
 		return err
 	}
@@ -284,4 +282,43 @@ func (a *App) adminAudit(w http.ResponseWriter, r *http.Request) error {
 	}
 	writeJSON(w, http.StatusOK, out)
 	return nil
+}
+
+// auditCategories — группы действий для фильтра журнала.
+var auditCategories = map[string]struct{ include, exclude []string }{
+	"users":   {include: []string{"user.%", "subscription.%"}, exclude: []string{"user.password_change"}},
+	"keys":    {include: []string{"key.%", "admin.key.%"}},
+	"account": {include: []string{"user.password_change", "auth.%"}},
+}
+
+// parseAuditFilter читает limit (1..1000, по умолчанию 200), before (id записи-курсора),
+// category (users, keys, account) и q (поиск, до 100 символов).
+func parseAuditFilter(query url.Values) (store.AuditFilter, error) {
+	f := store.AuditFilter{Limit: 200}
+	if raw := query.Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 1000 {
+			return f, invalid("Параметр limit должен быть целым числом от 1 до 1000")
+		}
+		f.Limit = n
+	}
+	if raw := query.Get("before"); raw != "" {
+		n, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || n < 1 {
+			return f, invalid("Параметр before должен быть id записи")
+		}
+		f.BeforeID = n
+	}
+	if raw := query.Get("category"); raw != "" {
+		c, ok := auditCategories[raw]
+		if !ok {
+			return f, invalid("Параметр category: users, keys или account")
+		}
+		f.Actions, f.ExcludeActions = c.include, c.exclude
+	}
+	f.Query = strings.TrimSpace(query.Get("q"))
+	if utf8.RuneCountInString(f.Query) > 100 {
+		return f, invalid("Слишком длинный поисковый запрос")
+	}
+	return f, nil
 }

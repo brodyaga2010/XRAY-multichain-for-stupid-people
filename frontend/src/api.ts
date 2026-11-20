@@ -1,3 +1,5 @@
+import { AuditQuery, auditQueryString } from "@/lib/audit";
+
 export type UserStatus = "pending" | "approved" | "suspended";
 export type UserRole = "user" | "admin";
 export type KeyType = "multi" | "tcp_reality" | "xhttp_reality";
@@ -159,7 +161,7 @@ export const api = {
   adminRevokeKey: (keyId: number) =>
     request<{ message: string }>(`/admin/keys/${keyId}`, { method: "DELETE" }),
   adminImportKeys: () => request<{ imported: number }>("/admin/keys/import", { method: "POST" }),
-  adminAudit: (limit = 200) => request<AuditEntry[]>(`/admin/audit?limit=${limit}`),
+  adminAudit: (query: AuditQuery = {}) => request<AuditEntry[]>(`/admin/audit?${auditQueryString(query)}`),
   subscription: () => request<{ url: string }>("/keys/subscription"),
   rotateSubscription: () => request<{ url: string }>("/keys/subscription/rotate", { method: "POST" }),
   changePassword: (current_password: string, new_password: string) =>
