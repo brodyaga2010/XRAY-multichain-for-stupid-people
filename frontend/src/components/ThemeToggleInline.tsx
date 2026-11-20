@@ -7,7 +7,7 @@ export function ThemeToggleInline() {
   const [choice, setChoice] = useTheme();
   return (
     <Tabs value={choice} onValueChange={(value) => setChoice(value as ThemeChoice)}>
-      <TabsList className="h-9">
+      <TabsList>
         <TabsTrigger value="light" aria-label="Светлая" title="Светлая" className="px-2.5">
           <Sun />
         </TabsTrigger>

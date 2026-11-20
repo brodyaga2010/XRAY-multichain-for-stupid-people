@@ -39,7 +39,7 @@ export function VpnStatusPill({ status, onDetails }: { status: VpnStatus | null;
         <Button
           variant="outline"
           size="sm"
-          className={cn("h-8 rounded-full px-3 tabular-nums", pill[tone])}
+          className={cn("h-9 rounded-full px-3 tabular-nums", pill[tone])}
           aria-label={`${text.title}${latency ? `, отклик ${latency}` : ""}`}
         >
           <span className={cn("size-2 rounded-full ring-3", dot[tone])} />

@@ -44,7 +44,6 @@ export function CreateKeyForm({
           maxLength={60}
           autoFocus={autoFocus}
           required
-          className="h-9"
         />
         <Button size="lg" disabled={busy || !name.trim()}>
           <Plus />

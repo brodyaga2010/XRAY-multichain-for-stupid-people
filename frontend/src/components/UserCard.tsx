@@ -156,7 +156,7 @@ function LimitForm({ user, onSave }: { user: User; onSave: (value: number) => Pr
       <div className="flex gap-2">
         <Input
           id={`limit-${user.id}`}
-          className="h-9 w-20 max-sm:flex-1"
+          className="w-20 max-sm:flex-1"
           type="number"
           inputMode="numeric"
           min={0}

@@ -47,7 +47,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (user: User) => void }) {
         <CardContent className="px-6">
           <form className="grid gap-4" onSubmit={submit}>
             <Tabs value={mode} onValueChange={(value) => setMode(value as AuthMode)}>
-              <TabsList className="h-9 w-full">
+              <TabsList className="w-full">
                 <TabsTrigger value="login">Вход</TabsTrigger>
                 <TabsTrigger value="register">Регистрация</TabsTrigger>
               </TabsList>

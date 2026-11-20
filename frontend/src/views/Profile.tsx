@@ -81,15 +81,15 @@ export function Profile({ user, onLogout }: { user: User; onLogout: () => void }
           <form className="grid gap-4" onSubmit={submit}>
             <div className="grid gap-2">
               <Label htmlFor="pw-current">Текущий пароль</Label>
-              <Input id="pw-current" className="h-9" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" required />
+              <Input id="pw-current" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" required />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="pw-next">Новый пароль</Label>
-              <Input id="pw-next" className="h-9" type="password" value={next} onChange={(e) => setNext(e.target.value)} minLength={8} autoComplete="new-password" required />
+              <Input id="pw-next" type="password" value={next} onChange={(e) => setNext(e.target.value)} minLength={8} autoComplete="new-password" required />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="pw-repeat">Повторите новый пароль</Label>
-              <Input id="pw-repeat" className="h-9" type="password" value={repeat} onChange={(e) => setRepeat(e.target.value)} minLength={8} autoComplete="new-password" required />
+              <Input id="pw-repeat" type="password" value={repeat} onChange={(e) => setRepeat(e.target.value)} minLength={8} autoComplete="new-password" required />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             {done && <p className="text-sm text-success">{done}</p>}

@@ -110,15 +110,19 @@ export function Shell({ user, onUserChange }: { user: User; onUserChange: (user:
     <div className="min-h-dvh md:flex">
       <aside
         className={cn(
-          "sticky top-0 hidden h-dvh shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground transition-[width] md:flex",
+          // Иконки стоят на месте (по центру полосы 64 px), при сворачивании меняется только ширина,
+          // а подписи уходят под край и гаснут — без перестройки и прыжков.
+          "sticky top-0 hidden h-dvh shrink-0 flex-col overflow-hidden border-r bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out md:flex",
           collapsed ? "w-16" : "w-60"
         )}
       >
-        <div className={cn("flex h-14 items-center gap-2.5 px-4", collapsed && "justify-center px-0")}>
+        <div className="flex h-14 items-center gap-2.5 px-4">
           <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
             <ShieldCheck className="size-4.5" />
           </span>
-          {!collapsed && <span className="truncate font-semibold">{SITE_NAME || "Кабинет"}</span>}
+          <span className={cn("truncate font-semibold whitespace-nowrap transition-opacity duration-200", collapsed && "opacity-0")}>
+            {SITE_NAME || "Кабинет"}
+          </span>
         </div>
         <nav className="grid gap-1 px-3 py-2">
           {nav.map((item) => (
@@ -129,26 +133,25 @@ export function Shell({ user, onUserChange }: { user: User; onUserChange: (user:
               onClick={() => selectView(item.id)}
               aria-current={view === item.id ? "page" : undefined}
               className={cn(
-                "flex h-9 items-center gap-2.5 rounded-md px-2.5 text-sm font-medium transition-colors",
+                "flex h-9 items-center gap-2.5 overflow-hidden rounded-md px-3 text-sm font-medium whitespace-nowrap transition-colors",
                 "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
-                view === item.id && "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent",
-                collapsed && "justify-center px-0"
+                view === item.id && "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent"
               )}
             >
               <item.icon className="size-4 shrink-0" />
-              {!collapsed && item.label}
+              <span className={cn("transition-opacity duration-200", collapsed && "opacity-0")}>{item.label}</span>
             </button>
           ))}
         </nav>
         <div className="mt-auto p-3">
           <Button
             variant="ghost"
-            className={cn("w-full justify-start text-sidebar-foreground/75", collapsed && "justify-center")}
+            className="w-full justify-start overflow-hidden px-3 text-sidebar-foreground/75"
             onClick={toggleSidebar}
             title={collapsed ? "Развернуть меню" : "Свернуть меню"}
           >
             {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
-            {!collapsed && "Свернуть"}
+            <span className={cn("transition-opacity duration-200", collapsed && "opacity-0")}>Свернуть</span>
           </Button>
         </div>
       </aside>

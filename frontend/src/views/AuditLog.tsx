@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, AuditEntry, User, VpnKey } from "@/api";
 import { useAutoRefresh } from "@/hooks";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { SortableHead } from "@/components/SortableHead";
+import { Card, CardContent } from "@/components/ui/card";
+import { Table, TableBody, TableHeader, TableCell, TableRow } from "@/components/ui/table";
+import { SortColumn, timeOf, useSort } from "@/lib/sort";
 import { formatDateTime, keyTitle } from "@/utils";
 
 const actionLabels: Record<string, string> = {
@@ -17,6 +19,10 @@ const actionLabels: Record<string, string> = {
   "user.limit_update": "Изменён лимит",
   "user.password_change": "Смена пароля"
 };
+
+type AuditSort = "date" | "actor" | "action" | "target";
+
+const actionLabel = (entry: AuditEntry) => actionLabels[entry.action] ?? entry.action;
 
 export function AuditLog({ setError }: { setError: (error: string) => void }) {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
@@ -38,6 +44,17 @@ export function AuditLog({ setError }: { setError: (error: string) => void }) {
   const keyById = useMemo(() => new Map(keys.map((key) => [String(key.id), key])), [keys]);
   const userById = useMemo(() => new Map(users.map((user) => [String(user.id), user])), [users]);
 
+  const columns = useMemo<Record<AuditSort, SortColumn<AuditEntry>>>(
+    () => ({
+      date: { value: (entry) => timeOf(entry.created_at), firstDir: "desc" },
+      actor: { value: (entry) => entry.actor_email },
+      action: { value: actionLabel },
+      target: { value: (entry) => (entry.target_type ? target(entry) : null) }
+    }),
+    [keyById, userById]
+  );
+  const { sorted, sort, toggle } = useSort<AuditEntry, AuditSort>(entries, columns, { key: "date", dir: "desc" });
+
   function target(entry: AuditEntry) {
     if (!entry.target_type) return "—";
     if (entry.target_id === null || entry.target_id === undefined) return entry.target_type;
@@ -55,11 +72,7 @@ export function AuditLog({ setError }: { setError: (error: string) => void }) {
 
   return (
     <Card className="gap-4">
-      <CardHeader>
-        <CardTitle>Журнал действий</CardTitle>
-        <CardDescription>записей: {entries.length}</CardDescription>
-      </CardHeader>
-      <CardContent className="@container">
+      <CardContent className="@container grid gap-3">
         {entries.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">Записей нет</p>
         ) : (
@@ -68,14 +81,22 @@ export function AuditLog({ setError }: { setError: (error: string) => void }) {
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow>
-                    <TableHead className="pl-4">Дата</TableHead>
-                    <TableHead>Кто</TableHead>
-                    <TableHead>Действие</TableHead>
-                    <TableHead>Объект</TableHead>
+                    <SortableHead column="date" sort={sort} onSort={toggle} className="pl-4">
+                      Дата
+                    </SortableHead>
+                    <SortableHead column="actor" sort={sort} onSort={toggle}>
+                      Кто
+                    </SortableHead>
+                    <SortableHead column="action" sort={sort} onSort={toggle}>
+                      Действие
+                    </SortableHead>
+                    <SortableHead column="target" sort={sort} onSort={toggle}>
+                      Объект
+                    </SortableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {entries.map((entry) => (
+                  {sorted.map((entry) => (
                     <TableRow key={entry.id}>
                       <TableCell className="pl-4 text-muted-foreground tabular-nums">{formatDateTime(entry.created_at)}</TableCell>
                       <TableCell className="max-w-56">
@@ -83,7 +104,7 @@ export function AuditLog({ setError }: { setError: (error: string) => void }) {
                           {entry.actor_email ?? "—"}
                         </span>
                       </TableCell>
-                      <TableCell className="font-medium">{actionLabels[entry.action] ?? entry.action}</TableCell>
+                      <TableCell className="font-medium">{actionLabel(entry)}</TableCell>
                       <TableCell className="max-w-72">
                         <span className="block truncate" title={target(entry)}>
                           {target(entry)}
@@ -95,7 +116,7 @@ export function AuditLog({ setError }: { setError: (error: string) => void }) {
               </Table>
             </div>
             <ul className="grid divide-y @3xl:hidden">
-              {entries.map((entry) => (
+              {sorted.map((entry) => (
                 <li key={entry.id} className="grid gap-0.5 py-2.5 first:pt-0 last:pb-0">
                   <div className="flex justify-between gap-3 text-xs text-muted-foreground">
                     <span className="tabular-nums">{formatDateTime(entry.created_at)}</span>
@@ -103,13 +124,14 @@ export function AuditLog({ setError }: { setError: (error: string) => void }) {
                       {entry.actor_email ?? "—"}
                     </span>
                   </div>
-                  <span className="text-sm font-medium">{actionLabels[entry.action] ?? entry.action}</span>
+                  <span className="text-sm font-medium">{actionLabel(entry)}</span>
                   <span className="truncate text-sm text-muted-foreground" title={target(entry)}>
                     {target(entry)}
                   </span>
                 </li>
               ))}
             </ul>
+            <p className="text-xs text-muted-foreground">Последние записи: {entries.length}</p>
           </>
         )}
       </CardContent>

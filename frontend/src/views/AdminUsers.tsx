@@ -294,7 +294,7 @@ export function AdminUsers({
           </div>
 
           {sorted.length > 0 && (
-            <div className={cn("flex min-h-8 flex-wrap items-center gap-x-3 gap-y-2", checkedUsers.length === 0 && "@3xl:hidden")}>
+            <div className={cn("flex min-h-9 flex-wrap items-center gap-x-3 gap-y-2", checkedUsers.length === 0 && "@3xl:hidden")}>
               <Checkbox
                 checked={allChecked ? true : checkedUsers.length > 0 ? "indeterminate" : false}
                 onCheckedChange={(value) => toggleAll(value === true)}
@@ -320,24 +320,24 @@ export function AdminUsers({
                     )}
                   >
                     {toApprove.length > 0 && (
-                      <Button size="sm" disabled={busy} onClick={() => runBulk("approve", toApprove)}>
+                      <Button disabled={busy} onClick={() => runBulk("approve", toApprove)}>
                         <Check />
                         Подтвердить · {toApprove.length}
                       </Button>
                     )}
                     {toRestore.length > 0 && (
-                      <Button size="sm" variant="outline" disabled={busy} onClick={() => runBulk("restore", toRestore)}>
+                      <Button variant="outline" disabled={busy} onClick={() => runBulk("restore", toRestore)}>
                         Восстановить · {toRestore.length}
                       </Button>
                     )}
                     {toSuspend.length > 0 && (
-                      <Button size="sm" variant="destructive" disabled={busy} onClick={() => runBulk("suspend", toSuspend)}>
+                      <Button variant="destructive" disabled={busy} onClick={() => runBulk("suspend", toSuspend)}>
                         <X />
                         {onlyPendingToSuspend ? "Отклонить" : "Заблокировать"} · {toSuspend.length}
                       </Button>
                     )}
                   </div>
-                  <Button variant="ghost" size="sm" className="ml-auto text-muted-foreground" onClick={() => toggleAll(false)}>
+                  <Button variant="ghost" className="ml-auto text-muted-foreground" onClick={() => toggleAll(false)}>
                     Снять выбор
                   </Button>
                 </>
