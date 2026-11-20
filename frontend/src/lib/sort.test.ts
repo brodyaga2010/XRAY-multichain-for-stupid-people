@@ -122,7 +122,7 @@ describe("timeOf", () => {
     expect(timeOf(input)).toBeNull();
   });
 
-  it("нечитаемая дата даёт NaN", () => {
-    expect(timeOf("не дата")).toBeNaN();
+  it("нечитаемая дата — как отсутствующая", () => {
+    expect(timeOf("не дата")).toBeNull();
   });
 });

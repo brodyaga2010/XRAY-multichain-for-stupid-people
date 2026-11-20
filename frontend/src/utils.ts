@@ -37,7 +37,9 @@ export function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} Б`;
   let value = bytes / 1024;
   let unit = 1;
-  while (value >= 1024 && unit < units.length - 1) {
+  // Сравниваем уже округлённое значение: 1023,96 КБ должно стать «1,0 МБ», а не «1024,0 КБ».
+  const rounded = (v: number) => Number(v.toFixed(v >= 100 ? 0 : 1));
+  while (rounded(value) >= 1024 && unit < units.length - 1) {
     value /= 1024;
     unit += 1;
   }

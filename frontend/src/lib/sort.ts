@@ -48,7 +48,9 @@ export function useSort<T, K extends string>(items: T[], columns: Record<K, Sort
   return { sorted, sort, toggle };
 }
 
-/** Время в миллисекундах или null, если даты нет. */
+/** Время в миллисекундах или null, если даты нет или она нечитаема (такие строки уходят в конец). */
 export function timeOf(value: string | null | undefined): number | null {
-  return value ? new Date(value).getTime() : null;
+  if (!value) return null;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? null : time;
 }
