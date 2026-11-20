@@ -53,6 +53,12 @@ func TestBuild(t *testing.T) {
 	if bodies[0] != "Ссылка:\r\nhttps://example.com/x?token=abc" || bodies[1] != "<p>Ссылка</p>" {
 		t.Errorf("тексты: %q", bodies)
 	}
+	// Письмо уходит без SMTPUTF8, поэтому в сыром виде допустима только латиница.
+	for i, c := range raw {
+		if c >= 0x80 {
+			t.Fatalf("байт %#x на позиции %d: письмо должно быть в ASCII", c, i)
+		}
+	}
 }
 
 // fakeSMTP — минимальный SMTP-сервер без TLS; возвращает адрес и канал с принятыми командами и письмом.
@@ -86,6 +92,8 @@ func fakeSMTP(t *testing.T, mechs string, rejectAuth bool) (string, <-chan strin
 			switch upper := strings.ToUpper(cmd); {
 			case strings.HasPrefix(upper, "EHLO"):
 				write("250-fake")
+				write("250-SMTPUTF8")
+				write("250-8BITMIME")
 				write("250 AUTH " + mechs)
 			case strings.HasPrefix(upper, "AUTH"):
 				if upper == "AUTH LOGIN" {
@@ -160,7 +168,8 @@ func TestSMTPSend(t *testing.T) {
 				t.Fatal(err)
 			}
 			log := <-got
-			for _, want := range append(tt.wantAuth, "MAIL FROM:<noreply@example.com>", "RCPT TO:<user@example.com>", "Subject: =?utf-8?q?") {
+			// MAIL FROM без SMTPUTF8 и BODY=8BITMIME, хотя сервер их объявил: иначе Beget не довезёт письмо до Яндекса.
+			for _, want := range append(tt.wantAuth, "MAIL FROM:<noreply@example.com>\n", "RCPT TO:<user@example.com>", "Subject: =?utf-8?q?") {
 				if !strings.Contains(log, want) {
 					t.Errorf("нет %q в диалоге:\n%s", want, log)
 				}
@@ -178,6 +187,7 @@ func TestNewSMTPValidation(t *testing.T) {
 		{"всё задано", SMTPConfig{Host: "smtp.example.com", Port: 465, From: "noreply@example.com"}, true},
 		{"нет хоста", SMTPConfig{Port: 465, From: "noreply@example.com"}, false},
 		{"кривой From", SMTPConfig{Host: "smtp.example.com", Port: 465, From: "не адрес"}, false},
+		{"From кириллицей", SMTPConfig{Host: "smtp.example.com", Port: 465, From: "noreply@почта.рф"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -188,5 +198,21 @@ func TestNewSMTPValidation(t *testing.T) {
 	}
 	if err := (&SMTP{cfg: SMTPConfig{Host: "x", Port: 1, From: "a@b.c"}}).Send(context.Background(), Message{To: "плохой"}); err == nil {
 		t.Error("кривой адрес получателя должен отклоняться")
+	}
+}
+
+func TestSendRejectsBadRecipient(t *testing.T) {
+	s, err := NewSMTP(SMTPConfig{Host: "127.0.0.1", Port: 1, From: "noreply@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []string{"не адрес", "user@почта.рф", "user@example.com\r\nBcc: x@example.com"}
+	for _, to := range tests {
+		t.Run(to, func(t *testing.T) {
+			// До подключения: порт 1 закрыт, и ошибка подключения означала бы, что адрес не проверен.
+			if err := s.Send(context.Background(), Message{To: to}); err == nil || !strings.Contains(err.Error(), "адрес получателя") {
+				t.Errorf("err = %v", err)
+			}
+		})
 	}
 }

@@ -60,6 +60,9 @@ func NewSMTP(cfg SMTPConfig) (*SMTP, error) {
 	if _, err := mail.ParseAddress(cfg.From); err != nil {
 		return nil, fmt.Errorf("почта: некорректный SMTP_FROM: %w", err)
 	}
+	if !isASCII(cfg.From) {
+		return nil, errors.New("почта: SMTP_FROM должен состоять из латиницы")
+	}
 	return &SMTP{cfg: cfg, now: time.Now}, nil
 }
 
@@ -72,8 +75,8 @@ func (s *SMTP) tlsConfig() *tls.Config {
 
 // Send отправляет письмо; таймаут — по ctx (не больше 30 с).
 func (s *SMTP) Send(ctx context.Context, msg Message) error {
-	if _, err := mail.ParseAddress(msg.To); err != nil {
-		return fmt.Errorf("почта: некорректный адрес получателя: %w", err)
+	if _, err := mail.ParseAddress(msg.To); err != nil || !isASCII(msg.To) {
+		return fmt.Errorf("почта: некорректный адрес получателя %q", msg.To)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -116,7 +119,7 @@ func (s *SMTP) Send(ctx context.Context, msg Message) error {
 			return fmt.Errorf("почта: вход на сервер: %w", err)
 		}
 	}
-	if err := client.Mail(s.cfg.From); err != nil {
+	if err := mailFrom(client, s.cfg.From); err != nil {
 		return fmt.Errorf("почта: MAIL FROM: %w", err)
 	}
 	if err := client.Rcpt(msg.To); err != nil {
@@ -133,6 +136,30 @@ func (s *SMTP) Send(ctx context.Context, msg Message) error {
 		return fmt.Errorf("почта: сервер не принял письмо: %w", err)
 	}
 	return client.Quit()
+}
+
+// mailFrom — MAIL FROM без параметров. client.Mail добавляет SMTPUTF8, если сервер его объявил, и тогда
+// Beget помечает письмо как UTF-8 и не может передать его серверам без SMTPUTF8 (mx.yandex.ru) — письмо
+// возвращается с ошибкой 5.0.0. Нам SMTPUTF8 не нужен: адреса проверены на латиницу, заголовки закодированы
+// по RFC 2047, тело — quoted-printable.
+func mailFrom(client *smtp.Client, from string) error {
+	id, err := client.Text.Cmd("MAIL FROM:<%s>", from)
+	if err != nil {
+		return err
+	}
+	client.Text.StartResponse(id)
+	defer client.Text.EndResponse(id)
+	_, _, err = client.Text.ReadResponse(250)
+	return err
+}
+
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0x80 || s[i] < 0x20 {
+			return false
+		}
+	}
+	return true
 }
 
 // auth выбирает способ входа из объявленных сервером: PLAIN, иначе LOGIN (Beget знает только LOGIN).

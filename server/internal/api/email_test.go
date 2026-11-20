@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"xraypanel/internal/mail"
 	"xraypanel/internal/store"
@@ -59,11 +60,14 @@ func withMail(t *testing.T) (*env, *mailbox) {
 	return e, box
 }
 
-// sessionCookie — текущая cookie сессии (как будто это другое устройство).
+// sessionCookie — текущая cookie сессии (как будто это другое устройство). Сессия, выпущенная за 1 мс до
+// отзыва, ещё считается действующей (auth.Session.ValidAfter), а тест делает вход и отзыв быстрее — поэтому
+// ждём, чтобы сессия гарантированно оказалась «старой».
 func sessionCookie(e *env) *http.Cookie {
 	u, _ := url.Parse(e.server.URL)
 	for _, c := range e.client.Jar.Cookies(u) {
 		if c.Name == e.cfg.CookieName {
+			time.Sleep(5 * time.Millisecond)
 			return c
 		}
 	}
