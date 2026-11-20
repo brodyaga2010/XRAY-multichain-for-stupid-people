@@ -341,6 +341,9 @@ func TestAccessGrantedMail(t *testing.T) {
 				!strings.Contains(m.Text, "Войти в кабинет: https://panel.example.com/") || !strings.Contains(m.HTML, `href="https://panel.example.com/"`) {
 				t.Errorf("письмо: to=%s subject=%q text=%q", m.To, m.Subject, m.Text)
 			}
+			if all := strings.ToLower(m.Subject + m.Text + m.HTML); strings.Contains(all, "vpn") || strings.Contains(all, "впн") {
+				t.Errorf("в письме упоминается VPN: %q", m.Text)
+			}
 		})
 	}
 }

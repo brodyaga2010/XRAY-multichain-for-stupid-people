@@ -127,7 +127,7 @@ func (a *App) sendVerification(ctx context.Context, user *store.User) error {
 
 // sendAccessGranted сообщает, что заявку подтвердили и можно входить.
 func (a *App) sendAccessGranted(user *store.User) {
-	intro := "Администратор подтвердил вашу заявку — теперь можно войти в кабинет и создать VPN-ключ."
+	intro := "Администратор подтвердил вашу заявку — теперь можно войти в личный кабинет."
 	if user.PaidUntil != nil {
 		intro += " Доступ действует до " + user.PaidUntil.Local().Format("02.01.2006") + "."
 	}
