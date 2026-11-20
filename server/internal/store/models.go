@@ -16,6 +16,8 @@ const (
 	KeyActive    = "active"
 	KeySuspended = "suspended"
 	KeyRevoked   = "revoked"
+	// KeyExpired — ключ отключён, потому что закончилась подписка владельца; продление возвращает его.
+	KeyExpired = "expired"
 )
 
 // User — пользователь панели.
@@ -27,8 +29,31 @@ type User struct {
 	Status       string
 	KeyLimit     int
 	SubToken     *string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	// PlanID — тариф; nil — без тарифа.
+	PlanID *int64
+	// PaidUntil — до какого момента действует подписка; nil — бессрочно.
+	PaidUntil *time.Time
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// SubscriptionActive — подписка действует в момент now (бессрочная — всегда).
+func (u *User) SubscriptionActive(now time.Time) bool {
+	return u.PaidUntil == nil || u.PaidUntil.After(now)
+}
+
+// Plan — тариф: сколько ключей и на какой срок.
+type Plan struct {
+	ID       int64
+	Name     string
+	KeyLimit int
+	// DurationDays — срок по умолчанию при назначении; 0 — бессрочно.
+	DurationDays int
+	// IsDefault — назначается при подтверждении заявки.
+	IsDefault bool
+	// Users — сколько пользователей на тарифе (заполняет ListPlans).
+	Users     int
+	CreatedAt time.Time
 }
 
 // VpnKey — ключ доступа.

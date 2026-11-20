@@ -225,6 +225,7 @@ func serve(ctx context.Context, cfg *config.Config) error {
 	}
 	bot := startBot(statsCtx, cfg, app, mon)
 	backupDone := startBackup(statsCtx, cfg, st, bot)
+	subscriptionsDone := startSubscriptions(statsCtx, app, bot)
 
 	serverErr := make(chan error, 1)
 	go func() {
@@ -239,6 +240,7 @@ func serve(ctx context.Context, cfg *config.Config) error {
 		<-monitorDone
 		<-bot.done
 		<-backupDone
+		<-subscriptionsDone
 		return err
 	case <-ctx.Done():
 	}
@@ -251,6 +253,7 @@ func serve(ctx context.Context, cfg *config.Config) error {
 	<-monitorDone
 	<-bot.done
 	<-backupDone
+	<-subscriptionsDone
 	return err
 }
 

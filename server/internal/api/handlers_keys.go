@@ -46,6 +46,9 @@ func (a *App) createKey(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	if err := requireSubscription(user, true); err != nil {
+		return err
+	}
 	ctx := detached(r)
 	active, err := a.st.CountActiveKeys(ctx, user.ID)
 	if err != nil {
@@ -144,7 +147,11 @@ func (a *App) subscription(w http.ResponseWriter, r *http.Request) error {
 	h.Set("Content-Type", "text/plain; charset=utf-8")
 	h.Set("profile-title", "base64:"+title)
 	h.Set("profile-update-interval", strconv.Itoa(a.cfg.SubscriptionUpdateHours))
-	h.Set("subscription-userinfo", "upload="+itoa(upload)+"; download="+itoa(download)+"; total=0; expire=0")
+	expire := int64(0) // 0 — бессрочно; клиенты показывают дату окончания подписки
+	if user.PaidUntil != nil {
+		expire = user.PaidUntil.Unix()
+	}
+	h.Set("subscription-userinfo", "upload="+itoa(upload)+"; download="+itoa(download)+"; total=0; expire="+itoa(expire))
 	h.Set("content-disposition", `attachment; filename="vpn.txt"`)
 	h.Set("cache-control", "no-store")
 	_, _ = w.Write([]byte(body))

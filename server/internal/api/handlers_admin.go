@@ -225,6 +225,9 @@ func (a *App) adminCreateKey(w http.ResponseWriter, r *http.Request) error {
 	if user.Status == store.UserSuspended {
 		return httpErr(http.StatusConflict, "Пользователь заблокирован")
 	}
+	if err := requireSubscription(user, false); err != nil {
+		return err
+	}
 	key, err := a.provisionKey(detached(r), user, name, admin, "admin.key.create")
 	if err != nil {
 		return err

@@ -13,6 +13,8 @@ const maxBulkUsers = 500
 type bulkIn struct {
 	Action  string  `json:"action"`
 	UserIDs []int64 `json:"user_ids"`
+	// Months — на сколько продлить подписку (только для extend).
+	Months int `json:"months"`
 }
 
 type bulkFailure struct {
@@ -28,7 +30,8 @@ type bulkOut struct {
 }
 
 // bulkApplies — подходит ли действие пользователю: подтвердить — ждущих, восстановить — заблокированных,
-// заблокировать — всех, кроме уже заблокированных и самого администратора.
+// заблокировать — всех, кроме уже заблокированных и самого администратора;
+// продлить — подтверждённых и заблокированных с ограниченным сроком (бессрочных не трогаем).
 func bulkApplies(action string, user *store.User, adminID int64) bool {
 	switch action {
 	case "approve":
@@ -37,6 +40,8 @@ func bulkApplies(action string, user *store.User, adminID int64) bool {
 		return user.Status == store.UserSuspended
 	case "suspend":
 		return user.Status != store.UserSuspended && user.ID != adminID
+	case "extend":
+		return user.Status != store.UserPending && user.PaidUntil != nil
 	}
 	return false
 }
@@ -52,8 +57,11 @@ func (a *App) adminBulkUsers(w http.ResponseWriter, r *http.Request) error {
 	if err := decodeBody(w, r, &body); err != nil {
 		return err
 	}
-	if !slices.Contains([]string{"approve", "restore", "suspend"}, body.Action) {
-		return invalid("Действие должно быть approve, restore или suspend")
+	if !slices.Contains([]string{"approve", "restore", "suspend", "extend"}, body.Action) {
+		return invalid("Действие должно быть approve, restore, suspend или extend")
+	}
+	if body.Action == "extend" && (body.Months < 1 || body.Months > 36) {
+		return invalid("Продлить можно на 1–36 месяцев")
 	}
 	slices.Sort(body.UserIDs)
 	ids := slices.Compact(body.UserIDs)
@@ -78,6 +86,8 @@ func (a *App) adminBulkUsers(w http.ResponseWriter, r *http.Request) error {
 			updated, err = a.activateUser(ctx, admin, user, "user.restore", extra)
 		case "suspend":
 			updated, err = a.suspendUser(ctx, admin, user, extra)
+		case "extend":
+			updated, err = a.ExtendSubscription(ctx, admin, user.ID, body.Months, "bulk")
 		}
 		if err != nil {
 			a.log.Warn("массовое действие не выполнено", "action", body.Action, "user_id", id, "error", err)

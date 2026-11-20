@@ -11,6 +11,7 @@ const (
 	revisionPanelV2 = "0002_panel_v2"
 	revisionMonitor = "0003_monitor_history"
 	revisionTraffic = "0004_traffic_daily"
+	revisionPlans   = "0005_subscriptions"
 )
 
 // Схема, идентичная результату alembic 0001 + 0002 (как её создаёт SQLAlchemy на SQLite).
@@ -89,6 +90,7 @@ var migrations = []migration{
 	{revisionInitial, revisionPanelV2, upgradeTo0002},
 	{revisionPanelV2, revisionMonitor, upgradeTo0003},
 	{revisionMonitor, revisionTraffic, upgradeTo0004},
+	{revisionTraffic, revisionPlans, upgradeTo0005},
 }
 
 // LatestRevision — актуальная версия схемы.
@@ -126,6 +128,24 @@ var upgradeTo0004 = []string{
 	FOREIGN KEY(key_id) REFERENCES vpn_keys (id)
 )`,
 	`CREATE INDEX ix_traffic_daily_day ON traffic_daily (day)`,
+}
+
+// 0005: тарифы и подписка пользователя (plan_id, paid_until; NULL — без тарифа / бессрочно).
+var upgradeTo0005 = []string{
+	`CREATE TABLE plans (
+	id INTEGER NOT NULL,
+	name VARCHAR(64) NOT NULL,
+	key_limit INTEGER NOT NULL,
+	duration_days INTEGER DEFAULT 0 NOT NULL,
+	is_default BOOLEAN DEFAULT 0 NOT NULL,
+	created_at DATETIME NOT NULL,
+	updated_at DATETIME NOT NULL,
+	PRIMARY KEY (id),
+	UNIQUE (name)
+)`,
+	`ALTER TABLE users ADD COLUMN plan_id INTEGER REFERENCES plans (id)`,
+	`ALTER TABLE users ADD COLUMN paid_until DATETIME`,
+	`CREATE INDEX ix_users_paid_until ON users (paid_until)`,
 }
 
 // Migrate приводит базу к последней версии. Идемпотентна.

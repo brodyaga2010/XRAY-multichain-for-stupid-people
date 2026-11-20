@@ -117,10 +117,29 @@ func (a *App) suspendUser(ctx context.Context, admin, user *store.User, extra ma
 }
 
 // activateUser возвращает в Xray ключи, отключённые блокировкой, и подтверждает пользователя.
+// При подтверждении заявки назначается тариф по умолчанию (если он выбран). Если подписка
+// уже закончилась, ключи не включаются, а переходят в expired — их вернёт продление.
 func (a *App) activateUser(ctx context.Context, admin, user *store.User, action string, extra map[string]any) (*store.User, error) {
+	if action == "user.approve" && user.PlanID == nil {
+		plan, err := a.st.DefaultPlan(ctx)
+		switch {
+		case err == nil:
+			user, err = a.changeSubscription(ctx, admin, user, subscriptionChange{
+				SetPlan: true, PlanID: &plan.ID, SetPaid: true, PaidUntil: planPaidUntil(plan, time.Now()),
+			}, "subscription.assign", map[string]any{"default_plan": true})
+			if err != nil {
+				return nil, err
+			}
+		case !errors.Is(err, store.ErrNotFound):
+			return nil, err
+		}
+	}
 	keys, err := a.st.KeysByOwnerStatus(ctx, user.ID, store.KeySuspended)
 	if err != nil {
 		return nil, err
+	}
+	if !user.SubscriptionActive(time.Now()) {
+		return a.setUserStatus(ctx, admin, user, store.UserApproved, action, "keys_expired", keys, store.KeyExpired, extra)
 	}
 	for _, key := range keys {
 		if err := a.xray.AddKey(key.UUID); err != nil {
@@ -326,16 +345,23 @@ func (a *App) keyOut(key *store.VpnKey, ownerEmail *string) keyOut {
 }
 
 type userOut struct {
-	ID        int64    `json:"id"`
-	Email     string   `json:"email"`
-	Role      string   `json:"role"`
-	Status    string   `json:"status"`
-	KeyLimit  int      `json:"key_limit"`
-	CreatedAt jsonTime `json:"created_at"`
+	ID        int64     `json:"id"`
+	Email     string    `json:"email"`
+	Role      string    `json:"role"`
+	Status    string    `json:"status"`
+	KeyLimit  int       `json:"key_limit"`
+	PlanID    *int64    `json:"plan_id"`
+	PaidUntil *jsonTime `json:"paid_until"`
+	// SubscriptionActive — срок не вышел (или подписка бессрочная).
+	SubscriptionActive bool     `json:"subscription_active"`
+	CreatedAt          jsonTime `json:"created_at"`
 }
 
 func toUserOut(u *store.User) userOut {
-	return userOut{ID: u.ID, Email: u.Email, Role: u.Role, Status: u.Status, KeyLimit: u.KeyLimit, CreatedAt: jsonTime{u.CreatedAt}}
+	return userOut{
+		ID: u.ID, Email: u.Email, Role: u.Role, Status: u.Status, KeyLimit: u.KeyLimit, PlanID: u.PlanID,
+		PaidUntil: toJSONTime(u.PaidUntil), SubscriptionActive: u.SubscriptionActive(time.Now()), CreatedAt: jsonTime{u.CreatedAt},
+	}
 }
 
 type authSession struct {

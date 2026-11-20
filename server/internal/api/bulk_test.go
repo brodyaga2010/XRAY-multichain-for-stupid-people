@@ -1,8 +1,10 @@
 package api_test
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"xraypanel/internal/store"
 )
@@ -96,6 +98,8 @@ func TestAdminBulkUsersValidation(t *testing.T) {
 		wantDetail string
 	}{
 		{"неизвестное действие", map[string]any{"action": "delete", "user_ids": []int64{1}}, false, 422, "approve"},
+		{"продление без срока", map[string]any{"action": "extend", "user_ids": []int64{1}}, false, 422, "1–36"},
+		{"продление на 37 месяцев", map[string]any{"action": "extend", "user_ids": []int64{1}, "months": 37}, false, 422, "1–36"},
 		{"пустой список", map[string]any{"action": "approve", "user_ids": []int64{}}, false, 422, "от 1 до 500"},
 		{"слишком много", map[string]any{"action": "approve", "user_ids": many}, false, 422, "от 1 до 500"},
 		{"не администратор", map[string]any{"action": "approve", "user_ids": []int64{1}}, true, 403, ""},
@@ -115,5 +119,33 @@ func TestAdminBulkUsersValidation(t *testing.T) {
 				t.Errorf("status %d: %s", resp.Status, resp.Raw)
 			}
 		})
+	}
+}
+
+func TestAdminBulkExtend(t *testing.T) {
+	e := newEnv(t)
+	e.makeUser("admin@example.com", asAdmin)
+	e.login("admin@example.com")
+	past := time.Now().Add(-time.Hour)
+	expired := e.makeUser("expired@example.com")
+	forever := e.makeUser("forever@example.com")
+	pending := e.makeUser("pending@example.com", withStatus(store.UserPending))
+	ctx := context.Background()
+	for _, u := range []*store.User{expired, pending} {
+		_ = e.st.SetSubscription(ctx, u.ID, nil, &past)
+	}
+
+	resp := e.post("/admin/users/bulk", map[string]any{"action": "extend", "months": 1, "user_ids": []int64{expired.ID, forever.ID, pending.ID}})
+
+	body := resp.JSON()
+	if resp.Status != 200 || len(body["updated"].([]any)) != 1 || body["skipped"] != float64(2) {
+		t.Fatalf("ответ: %d %s", resp.Status, resp.Raw)
+	}
+	got, _ := e.st.UserByID(ctx, expired.ID)
+	if !got.SubscriptionActive(time.Now()) || got.PaidUntil.Before(time.Now().AddDate(0, 0, 27)) {
+		t.Errorf("срок после продления: %v", got.PaidUntil)
+	}
+	if f, _ := e.st.UserByID(ctx, forever.ID); f.PaidUntil != nil {
+		t.Error("бессрочная подписка не должна стать срочной")
 	}
 }

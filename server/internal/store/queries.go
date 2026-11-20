@@ -9,15 +9,17 @@ import (
 	"time"
 )
 
-const userCols = "id, email, password_hash, role, status, key_limit, sub_token, created_at, updated_at"
+const userCols = "id, email, password_hash, role, status, key_limit, sub_token, plan_id, paid_until, created_at, updated_at"
 
 type scanner interface{ Scan(dest ...any) error }
 
 func scanUser(row scanner) (*User, error) {
 	var u User
 	var sub sql.NullString
-	var created, updated nullTime
-	if err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.KeyLimit, &sub, &created, &updated); err != nil {
+	var plan sql.NullInt64
+	var paid, created, updated nullTime
+	if err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.KeyLimit, &sub, &plan, &paid,
+		&created, &updated); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -26,7 +28,10 @@ func scanUser(row scanner) (*User, error) {
 	if sub.Valid {
 		u.SubToken = &sub.String
 	}
-	u.CreatedAt, u.UpdatedAt = created.T, updated.T
+	if plan.Valid {
+		u.PlanID = &plan.Int64
+	}
+	u.PaidUntil, u.CreatedAt, u.UpdatedAt = paid.ptr(), created.T, updated.T
 	return &u, nil
 }
 
@@ -102,6 +107,36 @@ func (q *Queries) SetKeyLimit(ctx context.Context, id int64, limit int) error {
 
 func (q *Queries) SetPasswordHash(ctx context.Context, id int64, hash string) error {
 	return q.updateUser(ctx, id, "password_hash = ?", hash)
+}
+
+// SetSubscription задаёт тариф и срок подписки (nil — без тарифа / бессрочно).
+func (q *Queries) SetSubscription(ctx context.Context, id int64, planID *int64, paidUntil *time.Time) error {
+	var paid any
+	if paidUntil != nil {
+		paid = formatTime(*paidUntil)
+	}
+	return q.updateUser(ctx, id, "plan_id = ?, paid_until = ?", planID, paid)
+}
+
+// ExpiredUsers — подтверждённые пользователи с закончившейся к now подпиской и ещё активными ключами.
+func (q *Queries) ExpiredUsers(ctx context.Context, now time.Time) ([]User, error) {
+	rows, err := q.db.QueryContext(ctx, "SELECT "+userCols+` FROM users WHERE status = ?
+		AND paid_until IS NOT NULL AND paid_until <= ?
+		AND EXISTS (SELECT 1 FROM vpn_keys k WHERE k.owner_id = users.id AND k.status = ?) ORDER BY id`,
+		UserApproved, formatTime(now), KeyActive)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	users := []User{}
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, *u)
+	}
+	return users, rows.Err()
 }
 
 func (q *Queries) SetSubToken(ctx context.Context, id int64, token string) error {
