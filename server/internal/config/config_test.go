@@ -27,6 +27,7 @@ func TestDefaultsMatchPythonSettings(t *testing.T) {
 		StatsPollSeconds: 15, OnlineWindowSeconds: 60, ListenAddr: "127.0.0.1:8000", TelegramAPIURL: "https://api.telegram.org",
 		MonitorIntervalSeconds: 60, MonitorFailThreshold: 3, MonitorProbeURL: "https://www.google.com/generate_204",
 		MonitorChainSlowMs: 3000, MonitorExitSlowMs: 300, BackupHour: 4,
+		SMTPPort: 465, SMTPFromName: "Personal",
 	}
 	if *cfg != want {
 		t.Errorf("настройки по умолчанию:\n got %+v\nwant %+v", *cfg, want)
@@ -64,6 +65,14 @@ func TestLoadOverridesAndValidation(t *testing.T) {
 		{"копия в полночь", map[string]string{"BACKUP_HOUR": "0"}, func(c *Config) bool { return c.BackupHour == 0 }, ""},
 		{"час больше 23", map[string]string{"BACKUP_HOUR": "24"}, nil, "BACKUP_HOUR"},
 		{"час меньше -1", map[string]string{"BACKUP_HOUR": "-2"}, nil, "BACKUP_HOUR"},
+		{"почта: отправитель из логина", map[string]string{"SMTP_HOST": "smtp.example.com", "SMTP_USERNAME": "noreply@example.com"},
+			func(c *Config) bool { return c.SMTPFrom == "noreply@example.com" && c.SMTPPort == 465 }, ""},
+		{"почта: своё имя отправителя", map[string]string{"SMTP_FROM_NAME": "VPN", "SUBSCRIPTION_TITLE": "X"},
+			func(c *Config) bool { return c.SMTPFromName == "VPN" }, ""},
+		{"почта: имя по умолчанию — из SUBSCRIPTION_TITLE", map[string]string{"SUBSCRIPTION_TITLE": "kemsekov"},
+			func(c *Config) bool { return c.SMTPFromName == "kemsekov" }, ""},
+		{"почта: нет адреса отправителя", map[string]string{"SMTP_HOST": "smtp.example.com", "SMTP_USERNAME": "login"}, nil, "SMTP_FROM"},
+		{"почта: порт вне диапазона", map[string]string{"SMTP_HOST": "smtp.example.com", "SMTP_FROM": "a@b.c", "SMTP_PORT": "70000"}, nil, "SMTP_PORT"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

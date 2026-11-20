@@ -8,10 +8,12 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"xraypanel/internal/auth"
 	"xraypanel/internal/config"
+	"xraypanel/internal/mail"
 	"xraypanel/internal/ratelimit"
 	"xraypanel/internal/store"
 	"xraypanel/internal/xray"
@@ -40,6 +42,9 @@ type App struct {
 	log       *slog.Logger
 	notifier  RegistrationNotifier
 	status    StatusSource
+	mailer    mail.Sender
+	// mailWG — письма, которые ещё отправляются в фоне (ждут тесты и остановка сервиса).
+	mailWG sync.WaitGroup
 }
 
 // New создаёт приложение.
@@ -90,6 +95,11 @@ func (a *App) Handler() http.Handler {
 	api("POST /auth/logout", a.logout)
 	api("GET /auth/me", a.me)
 	api("POST /auth/password", a.changePassword)
+	api("POST /auth/verify-email", a.verifyEmail)
+	api("POST /auth/resend-verification", a.resendVerification)
+	api("POST /auth/forgot-password", a.forgotPassword)
+	api("POST /auth/reset-password", a.resetPassword)
+	api("POST /auth/change-email", a.changeEmail)
 
 	api("GET /keys", a.listKeys)
 	api("POST /keys", a.createKey)
@@ -273,15 +283,22 @@ func (a *App) currentUser(r *http.Request) (*store.User, error) {
 	if err != nil || cookie.Value == "" {
 		return nil, httpErr(http.StatusUnauthorized, "Не выполнен вход")
 	}
-	id, err := auth.ParseToken(a.cfg.JWTSecret, cookie.Value)
+	session, err := auth.ParseToken(a.cfg.JWTSecret, cookie.Value)
 	if err != nil {
 		return nil, httpErr(http.StatusUnauthorized, "Invalid session")
 	}
-	user, err := a.st.UserByID(r.Context(), id)
+	user, err := a.st.UserByID(r.Context(), session.UserID)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, httpErr(http.StatusUnauthorized, "Пользователь не найден")
 	}
-	return user, err
+	if err != nil {
+		return nil, err
+	}
+	// После смены или сброса пароля сессии на других устройствах больше не действуют.
+	if !session.ValidAfter(user.SessionsValidAfter) {
+		return nil, httpErr(http.StatusUnauthorized, "Сессия завершена — войдите заново")
+	}
+	return user, nil
 }
 
 func (a *App) approvedUser(r *http.Request) (*store.User, error) {

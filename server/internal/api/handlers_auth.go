@@ -54,6 +54,9 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	a.notifyRegistered(*user, ratelimit.ClientIP(r, a.trusted))
+	if err := a.sendVerification(ctx, user); err != nil {
+		a.log.Warn("письмо для подтверждения почты не отправлено", "user_id", user.ID, "error", err)
+	}
 	writeJSON(w, http.StatusCreated, authSession{User: toUserOut(user)})
 	return nil
 }
@@ -86,11 +89,9 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) error {
 	case user.Status != store.UserApproved:
 		return httpErr(http.StatusForbidden, "Аккаунт ещё не подтверждён администратором")
 	}
-	token, err := auth.NewToken(a.cfg.JWTSecret, user.ID, time.Duration(a.cfg.AccessTokenMinutes)*time.Minute, time.Now())
-	if err != nil {
+	if err := a.startSession(w, user); err != nil {
 		return err
 	}
-	a.cookie.SetCookie(w, token)
 	writeJSON(w, http.StatusOK, authSession{User: toUserOut(user)})
 	return nil
 }
@@ -136,22 +137,23 @@ func (a *App) changePassword(w http.ResponseWriter, r *http.Request) error {
 	if !auth.VerifyPassword(current, user.PasswordHash) {
 		return httpErr(http.StatusBadRequest, "Текущий пароль указан неверно")
 	}
-	hash, err := auth.HashPassword(next)
+	// Другие устройства выходят, текущая сессия выпускается заново.
+	if err := a.setPassword(detached(r), user, next, "user.password_change", nil); err != nil {
+		return err
+	}
+	if err := a.startSession(w, user); err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, message{Message: "Пароль изменён, на других устройствах нужно войти заново"})
+	return nil
+}
+
+// startSession выпускает токен сессии и ставит cookie.
+func (a *App) startSession(w http.ResponseWriter, user *store.User) error {
+	token, err := auth.NewToken(a.cfg.JWTSecret, user.ID, time.Duration(a.cfg.AccessTokenMinutes)*time.Minute, time.Now())
 	if err != nil {
 		return err
 	}
-	ctx := detached(r)
-	err = a.st.Tx(ctx, func(q *store.Queries) error {
-		if err := q.SetPasswordHash(ctx, user.ID, hash); err != nil {
-			return err
-		}
-		return q.InsertAudit(ctx, store.Audit{
-			ActorID: &user.ID, Action: "user.password_change", TargetType: "user", TargetID: itoa(user.ID),
-		})
-	})
-	if err != nil {
-		return err
-	}
-	writeJSON(w, http.StatusOK, message{Message: "Пароль изменён"})
+	a.cookie.SetCookie(w, token)
 	return nil
 }

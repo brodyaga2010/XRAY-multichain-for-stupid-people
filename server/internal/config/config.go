@@ -64,6 +64,15 @@ type Config struct {
 
 	// Ежедневная копия базы в чат администратора Telegram: час по местному времени (TZ); -1 — выключено.
 	BackupHour int
+
+	// Почта для подтверждения адреса и сброса пароля; SMTPHost пустой — письма только в журнал сервиса.
+	// Порт 465 — сразу TLS (SSL), иначе STARTTLS.
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUsername string
+	SMTPPassword string
+	SMTPFrom     string
+	SMTPFromName string
 }
 
 // DefaultJWTSecret — значение по умолчанию, пригодное только для разработки.
@@ -105,6 +114,7 @@ func Defaults() Config {
 		MonitorChainSlowMs:      3000,
 		MonitorExitSlowMs:       300,
 		BackupHour:              4,
+		SMTPPort:                465,
 	}
 }
 
@@ -188,6 +198,12 @@ func Load(lookup Lookup) (*Config, error) {
 	num(&cfg.MonitorChainSlowMs, "MONITOR_CHAIN_SLOW_MS")
 	num(&cfg.MonitorExitSlowMs, "MONITOR_EXIT_SLOW_MS")
 	num(&cfg.BackupHour, "BACKUP_HOUR")
+	str(&cfg.SMTPHost, "SMTP_HOST")
+	num(&cfg.SMTPPort, "SMTP_PORT")
+	str(&cfg.SMTPUsername, "SMTP_USERNAME")
+	str(&cfg.SMTPPassword, "SMTP_PASSWORD")
+	str(&cfg.SMTPFrom, "SMTP_FROM")
+	str(&cfg.SMTPFromName, "SMTP_FROM_NAME")
 
 	if len([]rune(cfg.JWTSecret)) < 16 {
 		errs = append(errs, "JWT_SECRET: минимум 16 символов")
@@ -202,6 +218,20 @@ func Load(lookup Lookup) (*Config, error) {
 	}
 	if cfg.BackupHour < -1 || cfg.BackupHour > 23 {
 		errs = append(errs, fmt.Sprintf("BACKUP_HOUR: час от 0 до 23 или -1 (выключено), получено %d", cfg.BackupHour))
+	}
+	if cfg.SMTPHost != "" {
+		if cfg.SMTPFrom == "" {
+			cfg.SMTPFrom = cfg.SMTPUsername
+		}
+		if cfg.SMTPPort < 1 || cfg.SMTPPort > 65535 {
+			errs = append(errs, fmt.Sprintf("SMTP_PORT: порт от 1 до 65535, получено %d", cfg.SMTPPort))
+		}
+		if !strings.Contains(cfg.SMTPFrom, "@") {
+			errs = append(errs, "SMTP_FROM: адрес отправителя (или SMTP_USERNAME в виде адреса)")
+		}
+	}
+	if cfg.SMTPFromName == "" {
+		cfg.SMTPFromName = cfg.SubscriptionTitle
 	}
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("некорректная конфигурация: %s", strings.Join(errs, "; "))

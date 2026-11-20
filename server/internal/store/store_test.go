@@ -107,7 +107,8 @@ func TestMigrateCreatesSchemaOnEmptyDatabase(t *testing.T) {
 		t.Errorf("версия = %s", v)
 	}
 	want := map[string][]string{
-		"users":             {"created_at", "email", "id", "key_limit", "paid_until", "password_hash", "plan_id", "role", "status", "sub_token", "updated_at"},
+		"users":             {"created_at", "email", "email_verified_at", "id", "key_limit", "paid_until", "password_hash", "plan_id", "role", "sessions_valid_after", "status", "sub_token", "updated_at"},
+		"email_tokens":      {"created_at", "expires_at", "id", "new_email", "purpose", "token_hash", "used_at", "user_id"},
 		"plans":             {"created_at", "duration_days", "id", "is_default", "key_limit", "name", "updated_at"},
 		"vpn_keys":          {"client_config_json", "connection_uri", "created_at", "id", "last_seen_at", "name", "owner_id", "public_key", "short_id", "sni", "status", "traffic_down", "traffic_up", "type", "updated_at", "uuid"},
 		"audit_logs":        {"action", "actor_id", "created_at", "id", "metadata", "target_id", "target_type"},
@@ -128,7 +129,7 @@ func TestMigrateCreatesSchemaOnEmptyDatabase(t *testing.T) {
 		indexes = append(indexes, n)
 	}
 	rows.Close()
-	if !reflect.DeepEqual(indexes, []string{"ix_monitor_incidents_started_at", "ix_traffic_daily_day", "ix_users_email", "ix_users_paid_until", "ix_vpn_keys_owner_id"}) {
+	if !reflect.DeepEqual(indexes, []string{"ix_email_tokens_user_id", "ix_monitor_incidents_started_at", "ix_traffic_daily_day", "ix_users_email", "ix_users_paid_until", "ix_vpn_keys_owner_id"}) {
 		t.Errorf("индексы: %v", indexes)
 	}
 	var journal string

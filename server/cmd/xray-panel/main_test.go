@@ -1,6 +1,11 @@
 package main
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+
+	"xraypanel/internal/config"
+)
 
 func TestParseArgs(t *testing.T) {
 	tests := []struct {
@@ -43,5 +48,33 @@ func TestBackupLabel(t *testing.T) {
 		if got := backupLabel(tt.host); got != tt.want {
 			t.Errorf("backupLabel(%q) = %q, want %q", tt.host, got, tt.want)
 		}
+	}
+}
+
+func TestNewMailer(t *testing.T) {
+	tests := []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{"SMTP задан", map[string]string{"SMTP_HOST": "smtp.example.com", "SMTP_USERNAME": "noreply@example.com"}, "*mail.SMTP"},
+		{"стенд без SMTP — в журнал", map[string]string{"XRAY_MODE": "dry_run"}, "mail.Log"},
+		{"сервер без SMTP — выключено", map[string]string{"XRAY_MODE": "local"}, "<nil>"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := map[string]string{"JWT_SECRET": "test-secret-that-is-long-enough", "XRAY_MODE": "dry_run"}
+			for k, v := range tt.env {
+				env[k] = v
+			}
+			cfg, err := config.Load(func(k string) (string, bool) { v, ok := env[k]; return v, ok })
+			if err != nil {
+				t.Fatal(err)
+			}
+			m, err := newMailer(cfg)
+			if got := fmt.Sprintf("%T", m); err != nil || got != tt.want && !(tt.want == "<nil>" && m == nil) {
+				t.Errorf("got %s, err %v", got, err)
+			}
+		})
 	}
 }

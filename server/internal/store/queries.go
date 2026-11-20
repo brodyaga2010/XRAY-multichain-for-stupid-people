@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const userCols = "id, email, password_hash, role, status, key_limit, sub_token, plan_id, paid_until, created_at, updated_at"
+const userCols = "id, email, password_hash, role, status, key_limit, sub_token, plan_id, paid_until, email_verified_at, sessions_valid_after, created_at, updated_at"
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -17,9 +17,9 @@ func scanUser(row scanner) (*User, error) {
 	var u User
 	var sub sql.NullString
 	var plan sql.NullInt64
-	var paid, created, updated nullTime
+	var paid, verified, sessions, created, updated nullTime
 	if err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.KeyLimit, &sub, &plan, &paid,
-		&created, &updated); err != nil {
+		&verified, &sessions, &created, &updated); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -31,7 +31,8 @@ func scanUser(row scanner) (*User, error) {
 	if plan.Valid {
 		u.PlanID = &plan.Int64
 	}
-	u.PaidUntil, u.CreatedAt, u.UpdatedAt = paid.ptr(), created.T, updated.T
+	u.PaidUntil, u.EmailVerifiedAt, u.SessionsValidAfter = paid.ptr(), verified.ptr(), sessions.ptr()
+	u.CreatedAt, u.UpdatedAt = created.T, updated.T
 	return &u, nil
 }
 

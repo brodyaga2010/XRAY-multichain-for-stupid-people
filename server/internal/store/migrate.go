@@ -12,6 +12,7 @@ const (
 	revisionMonitor = "0003_monitor_history"
 	revisionTraffic = "0004_traffic_daily"
 	revisionPlans   = "0005_subscriptions"
+	revisionEmail   = "0006_email"
 )
 
 // Схема, идентичная результату alembic 0001 + 0002 (как её создаёт SQLAlchemy на SQLite).
@@ -91,6 +92,7 @@ var migrations = []migration{
 	{revisionPanelV2, revisionMonitor, upgradeTo0003},
 	{revisionMonitor, revisionTraffic, upgradeTo0004},
 	{revisionTraffic, revisionPlans, upgradeTo0005},
+	{revisionPlans, revisionEmail, upgradeTo0006},
 }
 
 // LatestRevision — актуальная версия схемы.
@@ -146,6 +148,26 @@ var upgradeTo0005 = []string{
 	`ALTER TABLE users ADD COLUMN plan_id INTEGER REFERENCES plans (id)`,
 	`ALTER TABLE users ADD COLUMN paid_until DATETIME`,
 	`CREATE INDEX ix_users_paid_until ON users (paid_until)`,
+}
+
+// 0006: подтверждение почты, ссылки из писем (хранится только SHA-256 токена) и отзыв старых сессий.
+var upgradeTo0006 = []string{
+	`ALTER TABLE users ADD COLUMN email_verified_at DATETIME`,
+	`ALTER TABLE users ADD COLUMN sessions_valid_after DATETIME`,
+	`CREATE TABLE email_tokens (
+	id INTEGER NOT NULL,
+	user_id INTEGER NOT NULL,
+	purpose VARCHAR(16) NOT NULL,
+	token_hash VARCHAR(64) NOT NULL,
+	new_email VARCHAR(320),
+	expires_at DATETIME NOT NULL,
+	used_at DATETIME,
+	created_at DATETIME NOT NULL,
+	PRIMARY KEY (id),
+	UNIQUE (token_hash),
+	FOREIGN KEY(user_id) REFERENCES users (id)
+)`,
+	`CREATE INDEX ix_email_tokens_user_id ON email_tokens (user_id)`,
 }
 
 // Migrate приводит базу к последней версии. Идемпотентна.

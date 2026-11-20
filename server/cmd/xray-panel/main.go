@@ -21,6 +21,7 @@ import (
 	"xraypanel/internal/api"
 	"xraypanel/internal/backup"
 	"xraypanel/internal/config"
+	"xraypanel/internal/mail"
 	"xraypanel/internal/monitor"
 	"xraypanel/internal/stats"
 	"xraypanel/internal/store"
@@ -223,6 +224,11 @@ func serve(ctx context.Context, cfg *config.Config) error {
 	} else {
 		close(monitorDone)
 	}
+	if mailer, err := newMailer(cfg); err != nil {
+		return err
+	} else if mailer != nil {
+		app.SetMailer(mailer)
+	}
 	bot := startBot(statsCtx, cfg, app, mon)
 	backupDone := startBackup(statsCtx, cfg, st, bot)
 	subscriptionsDone := startSubscriptions(statsCtx, app, bot)
@@ -254,6 +260,7 @@ func serve(ctx context.Context, cfg *config.Config) error {
 	<-bot.done
 	<-backupDone
 	<-subscriptionsDone
+	app.WaitMail()
 	return err
 }
 
@@ -372,4 +379,20 @@ func startBackup(ctx context.Context, cfg *config.Config, st *store.Store, rb ru
 		b.Run(ctx, cfg.BackupHour)
 	}()
 	return done
+}
+
+// newMailer — отправка писем: SMTP, если задан SMTP_HOST; в dry_run без SMTP — письма в журнал
+// (ссылки видны в логе стенда); иначе nil — почта выключена.
+func newMailer(cfg *config.Config) (mail.Sender, error) {
+	if cfg.SMTPHost == "" {
+		if cfg.EffectiveXrayMode() == "dry_run" {
+			return mail.Log{}, nil
+		}
+		slog.Warn("почта не настроена (SMTP_HOST): подтверждение адреса и сброс пароля по почте недоступны")
+		return nil, nil
+	}
+	return mail.NewSMTP(mail.SMTPConfig{
+		Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername, Password: cfg.SMTPPassword,
+		From: cfg.SMTPFrom, FromName: cfg.SMTPFromName,
+	})
 }

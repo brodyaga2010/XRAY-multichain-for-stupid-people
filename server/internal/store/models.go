@@ -33,8 +33,12 @@ type User struct {
 	PlanID *int64
 	// PaidUntil — до какого момента действует подписка; nil — бессрочно.
 	PaidUntil *time.Time
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	// EmailVerifiedAt — когда адрес подтверждён по ссылке из письма; nil — не подтверждён.
+	EmailVerifiedAt *time.Time
+	// SessionsValidAfter — сессии, выпущенные раньше, недействительны (смена или сброс пароля).
+	SessionsValidAfter *time.Time
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 // SubscriptionActive — подписка действует в момент now (бессрочная — всегда).

@@ -60,9 +60,9 @@ func TestTokenRoundTripAndFormat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id, err := ParseToken(secret, token)
-	if err != nil || id != 42 {
-		t.Fatalf("id=%d err=%v", id, err)
+	session, err := ParseToken(secret, token)
+	if diff := session.IssuedAt.Sub(now); err != nil || session.UserID != 42 || diff > 2*time.Millisecond || diff < -2*time.Millisecond {
+		t.Fatalf("session=%+v err=%v", session, err)
 	}
 	claims := jwt.MapClaims{}
 	parsed, _, err := jwt.NewParser().ParseUnverified(token, claims)
@@ -72,11 +72,11 @@ func TestTokenRoundTripAndFormat(t *testing.T) {
 	if parsed.Method.Alg() != "HS256" || claims["sub"] != "42" {
 		t.Errorf("alg=%s claims=%v", parsed.Method.Alg(), claims)
 	}
-	if exp, _ := claims["exp"].(float64); int64(exp) != now.Add(time.Hour).Unix() {
+	if exp, _ := claims["exp"].(float64); int64(exp) != now.Add(time.Hour).Unix() { // дробная часть — миллисекунды
 		t.Errorf("exp = %v", claims["exp"])
 	}
-	if _, has := claims["iat"]; has {
-		t.Error("payload должен содержать только sub и exp")
+	if iat, _ := claims["iat"].(float64); int64(iat) != now.Unix() || len(claims) != 3 {
+		t.Errorf("payload должен содержать sub, iat и exp: %v", claims)
 	}
 }
 
@@ -127,5 +127,31 @@ func TestCookies(t *testing.T) {
 	}
 	if clear.MaxAge != -1 || clear.Value != "" || clear.Path != "/" {
 		t.Errorf("clear: %+v", clear)
+	}
+}
+
+func TestSessionValidAfter(t *testing.T) {
+	issued := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
+	sameMoment := issued.Add(300 * time.Microsecond) // в пределах той же миллисекунды
+	later, earlier := issued.Add(400*time.Millisecond), issued.Add(-time.Second)
+	tests := []struct {
+		name  string
+		after *time.Time
+		want  bool
+	}{
+		{"ограничений нет", nil, true},
+		{"сессия новее", &earlier, true},
+		{"та же миллисекунда", &sameMoment, true},
+		{"пароль сменили через 400 мс после входа", &later, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := (Session{UserID: 1, IssuedAt: issued}).ValidAfter(tt.after); got != tt.want {
+				t.Errorf("got %v", got)
+			}
+		})
+	}
+	if (Session{UserID: 1}).ValidAfter(&issued) {
+		t.Error("старый токен без iat после смены пароля недействителен")
 	}
 }

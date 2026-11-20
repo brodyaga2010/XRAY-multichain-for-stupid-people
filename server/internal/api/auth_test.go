@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -212,7 +213,7 @@ func TestChangePassword(t *testing.T) {
 	if short.Status != 422 {
 		t.Errorf("short: %d", short.Status)
 	}
-	if ok.Status != 200 || ok.JSON()["message"] != "Пароль изменён" {
+	if ok.Status != 200 || !strings.HasPrefix(ok.JSON()["message"].(string), "Пароль изменён") {
 		t.Errorf("ok: %d %s", ok.Status, ok.Raw)
 	}
 	e.login("user@example.com", "newpassword1")

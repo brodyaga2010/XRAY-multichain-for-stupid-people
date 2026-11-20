@@ -353,14 +353,17 @@ type userOut struct {
 	PlanID    *int64    `json:"plan_id"`
 	PaidUntil *jsonTime `json:"paid_until"`
 	// SubscriptionActive — срок не вышел (или подписка бессрочная).
-	SubscriptionActive bool     `json:"subscription_active"`
-	CreatedAt          jsonTime `json:"created_at"`
+	SubscriptionActive bool `json:"subscription_active"`
+	// EmailVerified — адрес подтверждён по ссылке из письма.
+	EmailVerified bool     `json:"email_verified"`
+	CreatedAt     jsonTime `json:"created_at"`
 }
 
 func toUserOut(u *store.User) userOut {
 	return userOut{
 		ID: u.ID, Email: u.Email, Role: u.Role, Status: u.Status, KeyLimit: u.KeyLimit, PlanID: u.PlanID,
-		PaidUntil: toJSONTime(u.PaidUntil), SubscriptionActive: u.SubscriptionActive(time.Now()), CreatedAt: jsonTime{u.CreatedAt},
+		PaidUntil: toJSONTime(u.PaidUntil), SubscriptionActive: u.SubscriptionActive(time.Now()),
+		EmailVerified: u.EmailVerifiedAt != nil, CreatedAt: jsonTime{u.CreatedAt},
 	}
 }
 

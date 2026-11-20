@@ -50,32 +50,53 @@ func BurnPasswordCheck(password string) {
 	VerifyPassword(password, dummyHash)
 }
 
+// Время в токене — с миллисекундами: иначе сессия, открытая в ту же секунду, что и смена пароля,
+// осталась бы действительной.
+func init() { jwt.TimePrecision = time.Millisecond }
+
 // ErrInvalidToken — токен недействителен.
 var ErrInvalidToken = errors.New("invalid session")
 
-// NewToken выпускает JWT HS256 с {"sub": "<id>", "exp": unix}.
+// NewToken выпускает JWT HS256 с {"sub": "<id>", "iat": unix, "exp": unix}.
 func NewToken(secret string, userID int64, ttl time.Duration, now time.Time) (string, error) {
 	claims := jwt.RegisteredClaims{
 		Subject:   strconv.FormatInt(userID, 10),
+		IssuedAt:  jwt.NewNumericDate(now),
 		ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(secret))
 }
 
-// ParseToken проверяет подпись и срок и возвращает id пользователя.
-func ParseToken(secret, token string) (int64, error) {
+// Session — проверенный токен: чей и когда выпущен (у старых токенов без iat — нулевое время).
+type Session struct {
+	UserID   int64
+	IssuedAt time.Time
+}
+
+// ParseToken проверяет подпись и срок и возвращает сессию.
+func ParseToken(secret, token string) (Session, error) {
 	var claims jwt.RegisteredClaims
 	parsed, err := jwt.ParseWithClaims(token, &claims, func(*jwt.Token) (any, error) {
 		return []byte(secret), nil
 	}, jwt.WithValidMethods([]string{"HS256"}))
 	if err != nil || !parsed.Valid {
-		return 0, ErrInvalidToken
+		return Session{}, ErrInvalidToken
 	}
 	id, err := strconv.ParseInt(claims.Subject, 10, 64)
 	if err != nil {
-		return 0, ErrInvalidToken
+		return Session{}, ErrInvalidToken
 	}
-	return id, nil
+	s := Session{UserID: id}
+	if claims.IssuedAt != nil {
+		s.IssuedAt = claims.IssuedAt.Time
+	}
+	return s, nil
+}
+
+// ValidAfter — сессия выпущена не раньше момента after; after == nil — ограничений нет.
+// Допуск 1 мс: iat в JWT — дробное число секунд и при разборе может округлиться вниз.
+func (s Session) ValidAfter(after *time.Time) bool {
+	return after == nil || !s.IssuedAt.Before(after.Truncate(time.Millisecond).Add(-time.Millisecond))
 }
 
 // CookieOptions — параметры cookie сессии.
