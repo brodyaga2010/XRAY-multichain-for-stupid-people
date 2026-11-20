@@ -58,7 +58,11 @@ func DefaultChecks(d Deps) []Check {
 	}
 }
 
-func seconds(d time.Duration) string {
+// latency — «127 мс», от секунды — «1,25 с». Так же задержку пишет интерфейс (formatLatency).
+func latency(d time.Duration) string {
+	if d < time.Second {
+		return fmt.Sprintf("%d мс", d.Milliseconds())
+	}
 	return strings.Replace(fmt.Sprintf("%.2f с", d.Seconds()), ".", ",", 1)
 }
 
@@ -96,9 +100,9 @@ func (d Deps) chain(ctx context.Context) Result {
 	if resp.StatusCode >= 500 {
 		return Result{Status: StatusFail, Detail: fmt.Sprintf("проверочный сайт ответил %d", resp.StatusCode), Ms: ms(elapsed)}
 	}
-	r := Result{Status: StatusOK, Value: seconds(elapsed), Ms: ms(elapsed)}
+	r := Result{Status: StatusOK, Value: latency(elapsed), Ms: ms(elapsed)}
 	if d.ChainSlow > 0 && elapsed > d.ChainSlow {
-		r.Status, r.Detail = StatusWarn, "очень медленно: "+seconds(elapsed)
+		r.Status, r.Detail = StatusWarn, "очень медленно: "+latency(elapsed)
 	}
 	return r
 }

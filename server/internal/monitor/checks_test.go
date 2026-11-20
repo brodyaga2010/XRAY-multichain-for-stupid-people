@@ -123,6 +123,23 @@ func TestChainCheck(t *testing.T) {
 	}
 }
 
+func TestLatency(t *testing.T) {
+	tests := []struct {
+		d    time.Duration
+		want string
+	}{
+		{127*time.Millisecond + 400*time.Microsecond, "127 мс"},
+		{999 * time.Millisecond, "999 мс"},
+		{time.Second, "1,00 с"},
+		{1254 * time.Millisecond, "1,25 с"},
+	}
+	for _, tt := range tests {
+		if got := latency(tt.d); got != tt.want {
+			t.Errorf("latency(%v) = %q, want %q", tt.d, got, tt.want)
+		}
+	}
+}
+
 func TestExitCheck(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

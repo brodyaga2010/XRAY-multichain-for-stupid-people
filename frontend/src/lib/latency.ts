@@ -64,7 +64,8 @@ export function latencyBars(points: MonitorPoint[], now: number, minHeight = 3) 
   return { bars, from, end, scale, avg: okCount ? okSum / okCount : null };
 }
 
-/** «0,12 с» из миллисекунд. */
-export function formatSeconds(ms: number) {
+/** «127 мс», от секунды — «1,25 с». Так же задержку пишет сервер в проверках. */
+export function formatLatency(ms: number) {
+  if (ms < 1000) return `${Math.floor(ms)} мс`;
   return `${(ms / 1000).toFixed(2).replace(".", ",")} с`;
 }

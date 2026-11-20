@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MonitorPoint } from "@/api";
-import { DAY_MS, formatSeconds, latencyBars } from "./latency";
+import { DAY_MS, formatLatency, latencyBars } from "./latency";
 
 const now = Date.UTC(2026, 10, 20, 10, 38);
 const end = Date.UTC(2026, 10, 20, 11, 0);
@@ -62,11 +62,13 @@ describe("latencyBars", () => {
   });
 });
 
-describe("formatSeconds", () => {
+describe("formatLatency", () => {
   it.each([
-    [118.7, "0,12 с"],
+    [118.7, "118 мс"],
+    [999.9, "999 мс"],
+    [1000, "1,00 с"],
     [1500, "1,50 с"]
   ])("%s → %s", (ms, want) => {
-    expect(formatSeconds(ms)).toBe(want);
+    expect(formatLatency(ms)).toBe(want);
   });
 });

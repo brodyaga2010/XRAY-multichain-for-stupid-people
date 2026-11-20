@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { CheckStatus, MonitorPoint, MonitorStatus } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { DAY_MS, formatSeconds, LatencyBar, latencyBars } from "@/lib/latency";
+import { DAY_MS, formatLatency, LatencyBar, latencyBars } from "@/lib/latency";
 import { cn } from "@/lib/utils";
 import { formatDateTime, formatDuration, formatTime } from "@/utils";
 
@@ -13,6 +13,12 @@ const STATUS_TEXT: Record<CheckStatus, string> = {
   warn: "с перебоями",
   fail: "не работает",
   unknown: "нет данных"
+};
+
+/** Что измеряет проверка: у цепочки и канала обе цифры — задержка, но разных участков. */
+const CHECK_HINT: Record<string, string> = {
+  chain: "Отклик: запрос к сайту через оба сервера, как у пользователей",
+  exit: "Только участок между входным и выходным сервером — часть отклика"
 };
 
 const dotClass: Record<CheckStatus, string> = {
@@ -42,7 +48,7 @@ function Dot({ status }: { status: CheckStatus }) {
   return <span className={cn("mt-1.5 size-2 shrink-0 rounded-full", dotClass[status])} />;
 }
 
-/** Задержка цепочки за сутки по получасам — как график трафика; красный столбик — были проверки без ответа. */
+/** Отклик (проверка цепочки) за сутки по получасам — как график трафика; красный столбик — были проверки без ответа. */
 function LatencyChart({ points, now }: { points: MonitorPoint[]; now: number }) {
   const [hover, setHover] = useState<LatencyBar | null>(null);
   const { bars, from, scale, avg } = useMemo(() => latencyBars(points, now), [points, now]);
@@ -51,25 +57,25 @@ function LatencyChart({ points, now }: { points: MonitorPoint[]; now: number }) 
   function details(bar: LatencyBar) {
     if (bar.checks === 0) return "нет данных";
     const parts: string[] = [];
-    if (bar.avg != null) parts.push(`в среднем ${formatSeconds(bar.avg)}`);
-    if (bar.peak != null && bar.peak - (bar.avg ?? 0) >= 10) parts.push(`пик ${formatSeconds(bar.peak)}`);
+    if (bar.avg != null) parts.push(`в среднем ${formatLatency(bar.avg)}`);
+    if (bar.peak != null && bar.peak - (bar.avg ?? 0) >= 10) parts.push(`пик ${formatLatency(bar.peak)}`);
     if (bar.failed) parts.push(`без ответа ${bar.failed} из ${bar.checks}`);
     return parts.join(" · ");
   }
 
   return (
     <div className="grid gap-2">
-      <h3 className="text-sm font-medium">Задержка цепочки за сутки</h3>
+      <h3 className="text-sm font-medium">Отклик за сутки</h3>
       <div className="flex flex-wrap justify-between gap-x-3 text-xs text-muted-foreground tabular-nums">
         <span className={cn(hover && "font-medium text-foreground")}>
           {hover
             ? `${formatTime(new Date(hover.start))}–${formatTime(new Date(hover.end))}`
             : avg != null
-              ? `В среднем ${formatSeconds(avg)}`
+              ? `В среднем ${formatLatency(avg)}`
               : "Данных пока нет"}
         </span>
         <span className={cn(hover && "font-medium text-foreground", hover?.failed && "text-destructive")}>
-          {hover ? details(hover) : `шкала до ${formatSeconds(scale)}`}
+          {hover ? details(hover) : `шкала до ${formatLatency(scale)}`}
         </span>
       </div>
       <div className="relative">
@@ -105,7 +111,7 @@ function LatencyChart({ points, now }: { points: MonitorPoint[]; now: number }) 
       </div>
       {/* Для скринридеров — те же данные таблицей. */}
       <table className="sr-only">
-        <caption>Задержка цепочки за сутки, по получасам</caption>
+        <caption>Отклик за сутки, по получасам</caption>
         <thead>
           <tr>
             <th>Время</th>
@@ -170,6 +176,7 @@ export function HealthPanel({ status }: { status: MonitorStatus | null }) {
                   </span>
                   <span className="shrink-0 text-sm text-muted-foreground tabular-nums">{check.value || STATUS_TEXT[check.status]}</span>
                 </div>
+                {CHECK_HINT[check.id] && <span className="text-xs text-muted-foreground">{CHECK_HINT[check.id]}</span>}
                 {check.detail && check.status !== "ok" && (
                   <span className={cn("text-xs break-words", check.status === "fail" ? "text-destructive" : "text-muted-foreground")}>
                     {check.detail}

@@ -24,7 +24,7 @@ func (s Status) bad() bool { return s == StatusWarn || s == StatusFail }
 // Result — результат одного запуска проверки.
 type Result struct {
 	Status Status
-	Value  string   // короткое значение для списка: «0,42 с», «онлайн: 7»
+	Value  string   // короткое значение для списка: «127 мс», «онлайн: 7»
 	Detail string   // пояснение при проблеме
 	Ms     *float64 // задержка, если проверка её измеряет (попадает в историю)
 }

@@ -1,6 +1,7 @@
 import { CheckStatus, VpnStatus } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { formatLatency } from "@/lib/latency";
 import { cn } from "@/lib/utils";
 import { formatTime } from "@/utils";
 
@@ -31,7 +32,7 @@ export function VpnStatusPill({ status, onDetails }: { status: VpnStatus | null;
   if (!status || status.status === "unknown") return null;
   const tone = status.status;
   const text = TEXT[tone];
-  const latency = status.latency_ms != null ? `${Math.round(status.latency_ms)} мс` : null;
+  const latency = status.latency_ms != null ? formatLatency(status.latency_ms) : null;
 
   return (
     <Popover>
