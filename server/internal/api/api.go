@@ -102,6 +102,7 @@ func (a *App) Handler() http.Handler {
 	api("GET /admin/users/{user_id}/keys", a.adminListUserKeys)
 	api("GET /admin/keys", a.adminListKeys)
 	api("POST /admin/keys/import", a.adminImportKeys)
+	api("POST /admin/users/bulk", a.adminBulkUsers)
 	api("POST /admin/users/{user_id}/approve", a.adminApprove)
 	api("POST /admin/users/{user_id}/restore", a.adminRestore)
 	api("POST /admin/users/{user_id}/suspend", a.adminSuspend)

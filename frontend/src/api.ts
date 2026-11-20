@@ -1,6 +1,14 @@
 export type UserStatus = "pending" | "approved" | "suspended";
 export type UserRole = "user" | "admin";
 export type KeyType = "multi" | "tcp_reality" | "xhttp_reality";
+export type BulkAction = "approve" | "suspend" | "restore";
+
+export type BulkResult = {
+  updated: User[];
+  skipped: number;
+  failed: Array<{ id: number; email: string; detail: string }>;
+};
+
 export type KeyStatus = "active" | "suspended" | "revoked";
 export type LinkTransport = "tcp" | "grpc" | "xhttp";
 
@@ -133,6 +141,8 @@ export const api = {
   adminKeys: () => request<VpnKey[]>("/admin/keys"),
   adminStatus: () => request<MonitorStatus>("/admin/status"),
   adminUserKeys: (userId: number) => request<VpnKey[]>(`/admin/users/${userId}/keys`),
+  bulkUsers: (action: BulkAction, userIds: number[]) =>
+    request<BulkResult>("/admin/users/bulk", { method: "POST", body: JSON.stringify({ action, user_ids: userIds }) }),
   approveUser: (userId: number) => request<User>(`/admin/users/${userId}/approve`, { method: "POST" }),
   suspendUser: (userId: number) => request<User>(`/admin/users/${userId}/suspend`, { method: "POST" }),
   restoreUser: (userId: number) => request<User>(`/admin/users/${userId}/restore`, { method: "POST" }),

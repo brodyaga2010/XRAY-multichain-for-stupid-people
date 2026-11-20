@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { Check, ChevronRight, X } from "lucide-react";
-import { api, User, UserStatus, VpnKey } from "@/api";
+import { api, BulkAction, User, UserStatus, VpnKey } from "@/api";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { FilterChips } from "@/components/FilterChips";
 import { KeyTable } from "@/components/KeyTable";
@@ -68,8 +68,6 @@ function toRows(users: User[], keys: VpnKey[]): UserRow[] {
     .sort((a, b) => b.created_at.localeCompare(a.created_at)); // при равенстве в сортировке — новые выше
 }
 
-type BulkAction = "approve" | "suspend" | "restore";
-
 /** Кому из выбранных подходит действие: подтвердить — ждущих, восстановить — заблокированных,
  *  заблокировать — всех, кроме уже заблокированных и самого администратора. */
 function bulkTargets(users: User[], action: BulkAction, selfId: number) {
@@ -82,12 +80,6 @@ function bulkTargets(users: User[], action: BulkAction, selfId: number) {
       return users.filter((user) => user.status !== "suspended" && user.id !== selfId);
   }
 }
-
-const bulkCalls: Record<BulkAction, (userId: number) => Promise<User>> = {
-  approve: api.approveUser,
-  suspend: api.suspendUser,
-  restore: api.restoreUser
-};
 
 const stop = (event: MouseEvent) => event.stopPropagation();
 
@@ -218,17 +210,18 @@ export function AdminUsers({
     if (action === "suspend" && !(await confirmSuspend(targets))) return;
     setError("");
     setBusy(true);
-    const failed: string[] = [];
-    for (const user of targets) {
-      try {
-        await bulkCalls[action](user.id);
-      } catch (err) {
-        failed.push(`${user.email}: ${err instanceof Error ? err.message : "ошибка"}`);
+    try {
+      const result = await api.bulkUsers(action, targets.map((user) => user.id));
+      setChecked(new Set());
+      if (result.failed.length > 0) {
+        const emails = result.failed.map((item) => item.email).join(", ");
+        setError(`Не получилось для ${result.failed.length} из ${targets.length}: ${emails}`);
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось выполнить действие");
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
-    setChecked(new Set());
-    if (failed.length > 0) setError(`Не получилось для ${failed.length} из ${targets.length}. ${failed.join("; ")}`);
     await load().catch((err) => setError(err.message));
   }
 
