@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	_ "embed"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -26,6 +27,11 @@ const (
 	mailsPerHour    = 3
 	mailSendTimeout = 30 * time.Second
 )
+
+// mailLogo — щит с галочкой, как значок сайта и аватар бота; кладётся в письмо картинкой cid:logo.
+//
+//go:embed assets/mail-logo.png
+var mailLogo []byte
 
 var errTooManyMails = httpErr(http.StatusTooManyRequests, "Писем уже отправлено много — попробуйте через час")
 
@@ -88,16 +94,20 @@ func (a *App) letter(to, subject, intro, button, link, outro string) mail.Messag
 	text := fmt.Sprintf("Здравствуйте!\n\n%s\n\n%s: %s\n\n%s\n\n— %s", intro, button, link, outro, site)
 	body := fmt.Sprintf(`<!doctype html><html><body style="margin:0;padding:24px;background:#f6f7f6;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1c1f1d">
 <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:28px;border:1px solid #e3e6e4">
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;border-collapse:collapse"><tr>
+<td style="vertical-align:middle"><img src="cid:logo" width="40" height="40" alt="" style="display:block;border:0"></td>
+<td style="vertical-align:middle;padding-left:12px;font-size:16px;font-weight:600">%s</td>
+</tr></table>
 <p style="margin:0 0 16px;font-size:15px;line-height:1.5">Здравствуйте!</p>
 <p style="margin:0 0 24px;font-size:15px;line-height:1.5">%s</p>
 <p style="margin:0 0 24px"><a href="%s" style="display:inline-block;background:#2f7d57;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:15px;font-weight:600">%s</a></p>
 <p style="margin:0 0 8px;font-size:13px;line-height:1.5;color:#6b716d">%s</p>
 <p style="margin:0;font-size:12px;line-height:1.5;color:#8a908c;word-break:break-all">Если кнопка не открывается, скопируйте ссылку: %s</p>
 </div>
-<p style="max-width:480px;margin:12px auto 0;font-size:12px;color:#8a908c;text-align:center">%s</p>
-</body></html>`, html.EscapeString(intro), html.EscapeString(link), html.EscapeString(button), html.EscapeString(outro),
-		html.EscapeString(link), html.EscapeString(site))
-	return mail.Message{To: to, Subject: subject, Text: text, HTML: body}
+</body></html>`, html.EscapeString(site), html.EscapeString(intro), html.EscapeString(link), html.EscapeString(button), html.EscapeString(outro),
+		html.EscapeString(link))
+	return mail.Message{To: to, Subject: subject, Text: text, HTML: body,
+		Inline: []mail.Inline{{ContentID: "logo", ContentType: "image/png", Data: mailLogo}}}
 }
 
 // sendVerification отправляет ссылку подтверждения адреса.

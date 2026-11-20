@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -26,6 +27,16 @@ type Message struct {
 	Subject string
 	Text    string
 	HTML    string
+	// Inline — картинки внутри HTML (<img src="cid:ID">): лежат в самом письме, поэтому почтовики
+	// показывают их сразу, не спрашивая «загрузить изображения?».
+	Inline []Inline
+}
+
+// Inline — вложенная картинка, на которую HTML ссылается как cid:ContentID.
+type Inline struct {
+	ContentID   string
+	ContentType string
+	Data        []byte
 }
 
 // Sender отправляет письма.
@@ -218,9 +229,12 @@ func isLocalhost(name string) bool {
 	return name == "localhost" || name == "127.0.0.1" || name == "::1"
 }
 
-// Build собирает письмо MIME: multipart/alternative с текстом и HTML в UTF-8 (quoted-printable).
+// Build собирает письмо MIME: multipart/alternative с текстом и HTML в UTF-8 (quoted-printable);
+// с картинками — внутри multipart/related. Результат целиком в ASCII.
 func Build(from, fromName string, msg Message, now time.Time) []byte {
 	boundary := randomHex(12)
+	related := randomHex(12)
+	inline := msg.HTML != "" && len(msg.Inline) > 0
 	domain := "localhost"
 	if at := strings.LastIndex(from, "@"); at >= 0 {
 		domain = from[at+1:]
@@ -233,7 +247,12 @@ func Build(from, fromName string, msg Message, now time.Time) []byte {
 	header("Date", now.Format(time.RFC1123Z))
 	header("Message-ID", "<"+randomHex(16)+"@"+domain+">")
 	header("MIME-Version", "1.0")
-	header("Content-Type", `multipart/alternative; boundary="`+boundary+`"`)
+	if inline {
+		header("Content-Type", `multipart/related; type="multipart/alternative"; boundary="`+related+`"`)
+		fmt.Fprintf(&b, "\r\n--%s\r\nContent-Type: multipart/alternative; boundary=\"%s\"\r\n", related, boundary)
+	} else {
+		header("Content-Type", `multipart/alternative; boundary="`+boundary+`"`)
+	}
 	b.WriteString("\r\n")
 	part := func(contentType, body string) {
 		fmt.Fprintf(&b, "--%s\r\nContent-Type: %s; charset=utf-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n", boundary, contentType)
@@ -247,6 +266,19 @@ func Build(from, fromName string, msg Message, now time.Time) []byte {
 		part("text/html", msg.HTML)
 	}
 	fmt.Fprintf(&b, "--%s--\r\n", boundary)
+	if inline {
+		for _, img := range msg.Inline {
+			fmt.Fprintf(&b, "\r\n--%s\r\nContent-Type: %s\r\nContent-Transfer-Encoding: base64\r\nContent-ID: <%s>\r\nContent-Disposition: inline\r\n\r\n",
+				related, img.ContentType, img.ContentID)
+			encoded := base64.StdEncoding.EncodeToString(img.Data)
+			for len(encoded) > 76 {
+				b.WriteString(encoded[:76] + "\r\n")
+				encoded = encoded[76:]
+			}
+			b.WriteString(encoded + "\r\n")
+		}
+		fmt.Fprintf(&b, "--%s--\r\n", related)
+	}
 	return b.Bytes()
 }
 

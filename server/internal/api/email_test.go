@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/url"
@@ -95,6 +96,10 @@ func TestRegisterSendsVerification(t *testing.T) {
 	if path != "/verify-email" || !strings.Contains(msg.Text, "https://panel.example.com/verify-email?token=") ||
 		msg.Subject != "Подтвердите почту" || !strings.Contains(msg.HTML, "Подтвердить почту") {
 		t.Fatalf("письмо: %+v", msg)
+	}
+	if !strings.Contains(msg.HTML, `src="cid:logo"`) || len(msg.Inline) != 1 || msg.Inline[0].ContentID != "logo" ||
+		!bytes.HasPrefix(msg.Inline[0].Data, []byte("\x89PNG")) {
+		t.Errorf("логотип в письме: html=%v inline=%d", strings.Contains(msg.HTML, "cid:logo"), len(msg.Inline))
 	}
 
 	steps := []struct {

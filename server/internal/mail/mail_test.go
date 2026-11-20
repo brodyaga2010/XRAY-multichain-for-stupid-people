@@ -216,3 +216,65 @@ func TestSendRejectsBadRecipient(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildInline(t *testing.T) {
+	logo := bytes.Repeat([]byte{0x89, 'P', 'N', 'G', 0xff, 0x00}, 40) // длиннее строки base64 (76 символов)
+	tests := []struct {
+		name        string
+		msg         Message
+		wantRelated bool
+	}{
+		{"с картинкой", Message{To: "user@example.com", Subject: "Тест", Text: "текст", HTML: `<img src="cid:logo">`,
+			Inline: []Inline{{ContentID: "logo", ContentType: "image/png", Data: logo}}}, true},
+		{"картинка без HTML не нужна", Message{To: "user@example.com", Subject: "Тест", Text: "текст",
+			Inline: []Inline{{ContentID: "logo", ContentType: "image/png", Data: logo}}}, false},
+		{"без картинок", Message{To: "user@example.com", Subject: "Тест", Text: "текст", HTML: "<p>текст</p>"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw := Build("noreply@example.com", "Кабинет", tt.msg, time.Now())
+			for i, c := range raw {
+				if c >= 0x80 {
+					t.Fatalf("байт %#x на позиции %d: письмо должно быть в ASCII", c, i)
+				}
+			}
+			msg, err := mail.ReadMessage(bytes.NewReader(raw))
+			if err != nil {
+				t.Fatal(err)
+			}
+			mediaType, params, _ := mime.ParseMediaType(msg.Header.Get("Content-Type"))
+			if !tt.wantRelated {
+				if mediaType != "multipart/alternative" {
+					t.Fatalf("Content-Type = %s", mediaType)
+				}
+				return
+			}
+			if mediaType != "multipart/related" || params["type"] != "multipart/alternative" {
+				t.Fatalf("Content-Type = %s %v", mediaType, params)
+			}
+			reader := multipart.NewReader(msg.Body, params["boundary"])
+			first, err := reader.NextPart()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if alt, _, _ := mime.ParseMediaType(first.Header.Get("Content-Type")); alt != "multipart/alternative" {
+				t.Fatalf("первая часть: %s", alt)
+			}
+			img, err := reader.NextPart()
+			if err != nil {
+				t.Fatal(err)
+			}
+			encoded, _ := io.ReadAll(img)
+			data, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(string(encoded), "\r\n", ""))
+			if err != nil || !bytes.Equal(data, logo) {
+				t.Errorf("картинка не совпала: %v", err)
+			}
+			if img.Header.Get("Content-ID") != "<logo>" || img.Header.Get("Content-Type") != "image/png" || img.Header.Get("Content-Disposition") != "inline" {
+				t.Errorf("заголовки картинки: %v", img.Header)
+			}
+			if _, err := reader.NextPart(); err != io.EOF {
+				t.Errorf("лишние части: %v", err)
+			}
+		})
+	}
+}
