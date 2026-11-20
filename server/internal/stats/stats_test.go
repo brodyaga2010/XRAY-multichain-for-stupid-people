@@ -94,3 +94,22 @@ func TestRunCollectsPeriodicallyAndStopsOnCancel(t *testing.T) {
 		t.Error("фоновый сбор не отметил активность")
 	}
 }
+
+func TestCollectOnceWritesDailyHistory(t *testing.T) {
+	st, manager, runner, _ := setup(t)
+	now := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
+	day := now.In(time.Local).Format("2006-01-02")
+	ctx := context.Background()
+
+	for _, down := range []int64{7, 3} {
+		runner.Stats = map[string]int64{"user>>>k-1>>>traffic>>>downlink": down, "user>>>k-1>>>traffic>>>uplink": 1}
+		if _, err := CollectOnce(ctx, st, manager, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := st.TrafficByDay(ctx, store.TrafficFilter{From: day, To: day})
+	if err != nil || len(got) != 1 || got[0].Down != 10 || got[0].Up != 2 {
+		t.Errorf("история = %+v, err %v", got, err)
+	}
+}

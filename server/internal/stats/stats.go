@@ -41,6 +41,8 @@ func CollectOnce(ctx context.Context, st *store.Store, x *xray.Manager, now time
 	if len(emails) == 0 {
 		return 0, nil
 	}
+	// История по дням ведётся в часовом поясе сервера (TZ), как его видит администратор.
+	day := now.In(time.Local).Format("2006-01-02")
 	updated := 0
 	err = st.Tx(ctx, func(q *store.Queries) error {
 		for email := range emails {
@@ -49,7 +51,7 @@ func CollectOnce(ctx context.Context, st *store.Store, x *xray.Manager, now time
 			if active[email] {
 				seen = &now
 			}
-			found, err := q.AddTraffic(ctx, email, stat.Uplink, stat.Downlink, seen)
+			found, err := q.AddTraffic(ctx, email, stat.Uplink, stat.Downlink, seen, day)
 			if err != nil {
 				return err
 			}

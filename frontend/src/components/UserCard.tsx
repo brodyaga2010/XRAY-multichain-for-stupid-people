@@ -1,5 +1,5 @@
-import { FormEvent, useState } from "react";
-import { User, VpnKey } from "@/api";
+import { FormEvent, useCallback, useState } from "react";
+import { api, User, VpnKey } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { formatBytes, formatDate, formatSeen } from "@/utils";
 import { CreateKeyForm } from "./CreateKeyForm";
 import { StatusBadge } from "./StatusBadge";
+import { TrafficChart } from "./TrafficChart";
 import { UserAvatar } from "./UserAvatar";
 
 /** Карточка пользователя в админке: кто это, что с его ключами и что с ним можно сделать. */
@@ -36,6 +37,7 @@ export function UserCard({
   const live = keys.filter((key) => key.status !== "revoked");
   const active = live.filter((key) => key.status === "active").length;
   const online = live.filter((key) => key.online).length;
+  const loadTraffic = useCallback((days: number) => api.adminTraffic(days, user.id), [user.id]);
   const down = keys.reduce((sum, key) => sum + key.traffic_down, 0);
   const up = keys.reduce((sum, key) => sum + key.traffic_up, 0);
   const lastSeen = keys.reduce<string | null>((latest, key) => {
@@ -112,6 +114,8 @@ export function UserCard({
             </div>
           ))}
         </dl>
+
+        <TrafficChart load={loadTraffic} />
 
         <Separator />
 

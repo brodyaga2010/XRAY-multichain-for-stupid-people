@@ -264,7 +264,8 @@ func (q *Queries) SetKeyLastSeen(ctx context.Context, id int64, seen time.Time) 
 
 // AddTraffic прибавляет трафик к ключу по UUID и (если seen != nil) отмечает время активности.
 // Возвращает false, если ключа с таким UUID нет.
-func (q *Queries) AddTraffic(ctx context.Context, uuid string, up, down int64, seen *time.Time) (bool, error) {
+// day — календарный день ("2006-01-02"), к которому относится трафик в истории по дням.
+func (q *Queries) AddTraffic(ctx context.Context, uuid string, up, down int64, seen *time.Time, day string) (bool, error) {
 	var seenArg any
 	if seen != nil {
 		seenArg = formatTime(*seen)
@@ -277,7 +278,14 @@ func (q *Queries) AddTraffic(ctx context.Context, uuid string, up, down int64, s
 		return false, err
 	}
 	n, _ := res.RowsAffected()
-	return n > 0, nil
+	if n == 0 || (up == 0 && down == 0) {
+		return n > 0, nil
+	}
+	_, err = q.db.ExecContext(ctx,
+		`INSERT INTO traffic_daily (key_id, day, up, down) SELECT id, ?, ?, ? FROM vpn_keys WHERE uuid = ?
+		 ON CONFLICT (key_id, day) DO UPDATE SET up = up + excluded.up, down = down + excluded.down`,
+		day, up, down, uuid)
+	return true, err
 }
 
 // ---------- аудит ----------

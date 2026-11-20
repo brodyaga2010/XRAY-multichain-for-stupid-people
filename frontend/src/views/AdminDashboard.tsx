@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Activity, ArrowUpDown, Check, Clock3, KeyRound, Users, Wifi } from "lucide-react";
 import { api, MonitorStatus, User, VpnKey } from "@/api";
 import { overall } from "@/components/HealthPanel";
 import { Stat, StatStrip } from "@/components/StatStrip";
 import { StatusBadge } from "@/components/StatusBadge";
+import { TrafficChart } from "@/components/TrafficChart";
 import { UserAvatar } from "@/components/UserAvatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,6 +38,7 @@ export function AdminDashboard({
   }, []);
 
   useAutoRefresh(load);
+  const loadTraffic = useCallback((days: number) => api.adminTraffic(days), []);
 
   async function approve(userId: number) {
     setApproving(userId);
@@ -89,6 +91,12 @@ export function AdminDashboard({
           { label: "Пользователей", value: users.length, icon: Users, onClick: () => onNavigate("admin") }
         ]}
       />
+
+      <Card>
+        <CardContent>
+          <TrafficChart load={loadTraffic} title="Трафик всех ключей" />
+        </CardContent>
+      </Card>
 
       <div className="grid items-start gap-4 md:gap-6 lg:grid-cols-2">
         <Card className="gap-3">

@@ -11,6 +11,9 @@ export type BulkResult = {
   failed: Array<{ id: number; email: string; detail: string }>;
 };
 
+/** Трафик за день (день — по часовому поясу сервера). */
+export type TrafficDay = { day: string; up: number; down: number };
+
 export type KeyStatus = "active" | "suspended" | "revoked";
 export type LinkTransport = "tcp" | "grpc" | "xhttp";
 
@@ -162,6 +165,9 @@ export const api = {
     request<{ message: string }>(`/admin/keys/${keyId}`, { method: "DELETE" }),
   adminImportKeys: () => request<{ imported: number }>("/admin/keys/import", { method: "POST" }),
   adminAudit: (query: AuditQuery = {}) => request<AuditEntry[]>(`/admin/audit?${auditQueryString(query)}`),
+  adminTraffic: (days: number, userId?: number) =>
+    request<TrafficDay[]>(`/admin/traffic?days=${days}${userId ? `&user_id=${userId}` : ""}`),
+  ownTraffic: (days: number) => request<TrafficDay[]>(`/keys/traffic?days=${days}`),
   subscription: () => request<{ url: string }>("/keys/subscription"),
   rotateSubscription: () => request<{ url: string }>("/keys/subscription/rotate", { method: "POST" }),
   changePassword: (current_password: string, new_password: string) =>

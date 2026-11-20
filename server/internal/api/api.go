@@ -96,6 +96,7 @@ func (a *App) Handler() http.Handler {
 	api("GET /keys/subscription", a.getSubscription)
 	api("POST /keys/subscription/rotate", a.rotateSubscription)
 	api("DELETE /keys/{key_id}", a.revokeOwnKey)
+	api("GET /keys/traffic", a.ownTraffic)
 	api("GET /status", a.userStatus)
 
 	api("GET /admin/users", a.adminListUsers)
@@ -111,6 +112,7 @@ func (a *App) Handler() http.Handler {
 	api("DELETE /admin/keys/{key_id}", a.adminRevokeKey)
 	api("GET /admin/audit", a.adminAudit)
 	api("GET /admin/status", a.adminStatus)
+	api("GET /admin/traffic", a.adminTraffic)
 
 	mux.Handle("/api/", a.handle(func(http.ResponseWriter, *http.Request) error {
 		return httpErr(http.StatusNotFound, "Not Found")

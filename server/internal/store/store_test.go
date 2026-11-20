@@ -112,6 +112,7 @@ func TestMigrateCreatesSchemaOnEmptyDatabase(t *testing.T) {
 		"audit_logs":        {"action", "actor_id", "created_at", "id", "metadata", "target_id", "target_type"},
 		"monitor_points":    {"at", "ms", "status"},
 		"monitor_incidents": {"check_id", "detail", "ended_at", "id", "name", "started_at", "status"},
+		"traffic_daily":     {"day", "down", "key_id", "up"},
 	}
 	for table, cols := range want {
 		if got := columns(t, st, table); !reflect.DeepEqual(got, cols) {
@@ -126,7 +127,7 @@ func TestMigrateCreatesSchemaOnEmptyDatabase(t *testing.T) {
 		indexes = append(indexes, n)
 	}
 	rows.Close()
-	if !reflect.DeepEqual(indexes, []string{"ix_monitor_incidents_started_at", "ix_users_email", "ix_vpn_keys_owner_id"}) {
+	if !reflect.DeepEqual(indexes, []string{"ix_monitor_incidents_started_at", "ix_traffic_daily_day", "ix_users_email", "ix_vpn_keys_owner_id"}) {
 		t.Errorf("индексы: %v", indexes)
 	}
 	var journal string
@@ -303,9 +304,9 @@ func TestAddTrafficAccumulates(t *testing.T) {
 	}
 	seen := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 
-	found1, _ := st.AddTraffic(ctx, "u-1", 10, 20, &seen)
-	found2, _ := st.AddTraffic(ctx, "u-1", 1, 2, nil)
-	missing, _ := st.AddTraffic(ctx, "nope", 1, 1, nil)
+	found1, _ := st.AddTraffic(ctx, "u-1", 10, 20, &seen, "2026-11-20")
+	found2, _ := st.AddTraffic(ctx, "u-1", 1, 2, nil, "2026-11-20")
+	missing, _ := st.AddTraffic(ctx, "nope", 1, 1, nil, "2026-11-20")
 
 	got, _ := st.KeyByID(ctx, key.ID)
 	if !found1 || !found2 || missing || got.TrafficUp != 11 || got.TrafficDown != 22 || got.LastSeenAt == nil || !got.LastSeenAt.Equal(seen) {

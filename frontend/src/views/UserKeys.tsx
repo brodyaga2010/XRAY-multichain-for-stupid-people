@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Plus } from "lucide-react";
 import { api, User, VpnKey } from "@/api";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,8 @@ import { CreateKeyForm } from "@/components/CreateKeyForm";
 import { KeyTable } from "@/components/KeyTable";
 import { SearchBox } from "@/components/SearchBox";
 import { SubscriptionPanel } from "@/components/SubscriptionPanel";
+import { TrafficChart } from "@/components/TrafficChart";
+import { Card, CardContent } from "@/components/ui/card";
 import { useAutoRefresh } from "@/hooks";
 import { matchesSearch } from "@/utils";
 
@@ -47,6 +49,7 @@ export function UserKeys({
   }, [isAdmin]);
 
   useAutoRefresh(load);
+  const loadOwnTraffic = useCallback((days: number) => api.ownTraffic(days), []);
 
   async function createKey(name: string) {
     setError("");
@@ -158,7 +161,16 @@ export function UserKeys({
         }
         search={showSearch && <SearchBox value={query} onChange={setQuery} placeholder="Поиск устройств" />}
       />
-      <SubscriptionPanel setError={setError} className="xl:sticky xl:top-20" />
+      <div className="grid gap-4 md:gap-6 xl:sticky xl:top-20">
+        <SubscriptionPanel setError={setError} />
+        {keys.length > 0 && (
+          <Card>
+            <CardContent>
+              <TrafficChart load={loadOwnTraffic} title="Мой трафик" />
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }
