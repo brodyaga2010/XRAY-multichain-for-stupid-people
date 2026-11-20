@@ -125,6 +125,17 @@ func (a *App) sendVerification(ctx context.Context, user *store.User) error {
 	return nil
 }
 
+// sendAccessGranted сообщает, что заявку подтвердили и можно входить.
+func (a *App) sendAccessGranted(user *store.User) {
+	intro := "Администратор подтвердил вашу заявку — теперь можно войти в кабинет и создать VPN-ключ."
+	if user.PaidUntil != nil {
+		intro += " Доступ действует до " + user.PaidUntil.Local().Format("02.01.2006") + "."
+	}
+	a.sendMail(a.letter(user.Email, "Доступ открыт", intro,
+		"Войти в кабинет", strings.TrimRight(a.cfg.PublicBaseURL, "/")+"/",
+		"Если вы не регистрировались, просто удалите письмо."))
+}
+
 // emailToken находит действующую ссылку нужного назначения.
 func (a *App) emailToken(ctx context.Context, raw *string, purposes ...string) (*store.EmailToken, error) {
 	bad := httpErr(http.StatusBadRequest, "Ссылка устарела или уже использована — запросите новое письмо")

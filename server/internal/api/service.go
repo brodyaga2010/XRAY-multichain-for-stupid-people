@@ -119,6 +119,7 @@ func (a *App) suspendUser(ctx context.Context, admin, user *store.User, extra ma
 // activateUser возвращает в Xray ключи, отключённые блокировкой, и подтверждает пользователя.
 // При подтверждении заявки назначается тариф по умолчанию (если он выбран). Если подписка
 // уже закончилась, ключи не включаются, а переходят в expired — их вернёт продление.
+// Подтверждённому из заявки (pending) уходит письмо, что доступ открыт.
 func (a *App) activateUser(ctx context.Context, admin, user *store.User, action string, extra map[string]any) (*store.User, error) {
 	if action == "user.approve" && user.PlanID == nil {
 		plan, err := a.st.DefaultPlan(ctx)
@@ -138,15 +139,25 @@ func (a *App) activateUser(ctx context.Context, admin, user *store.User, action 
 	if err != nil {
 		return nil, err
 	}
+	wasPending := user.Status == store.UserPending
+	var updated *store.User
 	if !user.SubscriptionActive(time.Now()) {
-		return a.setUserStatus(ctx, admin, user, store.UserApproved, action, "keys_expired", keys, store.KeyExpired, extra)
-	}
-	for _, key := range keys {
-		if err := a.xray.AddKey(key.UUID); err != nil {
-			return nil, err
+		updated, err = a.setUserStatus(ctx, admin, user, store.UserApproved, action, "keys_expired", keys, store.KeyExpired, extra)
+	} else {
+		for _, key := range keys {
+			if err := a.xray.AddKey(key.UUID); err != nil {
+				return nil, err
+			}
 		}
+		updated, err = a.setUserStatus(ctx, admin, user, store.UserApproved, action, "keys_restored", keys, store.KeyActive, extra)
 	}
-	return a.setUserStatus(ctx, admin, user, store.UserApproved, action, "keys_restored", keys, store.KeyActive, extra)
+	if err != nil {
+		return nil, err
+	}
+	if action == "user.approve" && wasPending {
+		a.sendAccessGranted(updated)
+	}
+	return updated, nil
 }
 
 func (a *App) setUserStatus(ctx context.Context, admin, user *store.User, userStatus, action, counter string,

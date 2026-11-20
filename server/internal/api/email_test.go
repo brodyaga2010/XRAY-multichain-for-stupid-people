@@ -281,3 +281,66 @@ func TestResendVerification(t *testing.T) {
 		t.Errorf("уже подтверждена: %d", resp.Status)
 	}
 }
+
+func TestAccessGrantedMail(t *testing.T) {
+	tests := []struct {
+		name        string
+		status      string
+		defaultPlan bool
+		act         func(e *env, id int64)
+		wantMail    bool
+		wantText    string
+	}{
+		{"подтверждение заявки в панели", store.UserPending, false, func(e *env, id int64) {
+			e.post("/admin/users/"+itoa(id)+"/approve", nil)
+		}, true, "Администратор подтвердил вашу заявку"},
+		{"подтверждение с тарифом по умолчанию называет срок", store.UserPending, true, func(e *env, id int64) {
+			e.post("/admin/users/"+itoa(id)+"/approve", nil)
+		}, true, "Доступ действует до " + time.Now().AddDate(0, 0, 30).Format("02.01.2006")},
+		{"массовое подтверждение", store.UserPending, false, func(e *env, id int64) {
+			e.post("/admin/users/bulk", map[string]any{"action": "approve", "user_ids": []int64{id}})
+		}, true, "Администратор подтвердил вашу заявку"},
+		{"подтверждение из Telegram", store.UserPending, false, func(e *env, id int64) {
+			_, _, _ = e.app.ModerateUser(context.Background(), id, true, "telegram")
+		}, true, "Администратор подтвердил вашу заявку"},
+		{"отклонение — без письма", store.UserPending, false, func(e *env, id int64) {
+			_, _, _ = e.app.ModerateUser(context.Background(), id, false, "telegram")
+		}, false, ""},
+		{"восстановление после блокировки — без письма", store.UserSuspended, false, func(e *env, id int64) {
+			e.post("/admin/users/"+itoa(id)+"/restore", nil)
+		}, false, ""},
+		{"повторное подтверждение уже подтверждённого — без письма", store.UserApproved, false, func(e *env, id int64) {
+			e.post("/admin/users/"+itoa(id)+"/approve", nil)
+		}, false, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, box := withMail(t)
+			e.makeUser("admin@example.com", asAdmin)
+			e.login("admin@example.com")
+			if tt.defaultPlan {
+				e.post("/admin/plans", map[string]any{"name": "Базовый", "key_limit": 2, "duration_days": 30, "is_default": true})
+			}
+			user := e.makeUser("new@example.com", withStatus(tt.status))
+
+			tt.act(e, user.ID)
+			e.app.WaitMail()
+
+			msgs := box.all()
+			if !tt.wantMail {
+				if len(msgs) != 0 {
+					t.Fatalf("писем %d, ждём 0: %q", len(msgs), msgs[0].Subject)
+				}
+				return
+			}
+			if len(msgs) != 1 {
+				t.Fatalf("писем %d, ждём 1", len(msgs))
+			}
+			m := msgs[0]
+			if m.To != "new@example.com" || m.Subject != "Доступ открыт" || !strings.Contains(m.Text, tt.wantText) ||
+				!strings.Contains(m.Text, "Войти в кабинет: https://panel.example.com/") || !strings.Contains(m.HTML, `href="https://panel.example.com/"`) {
+				t.Errorf("письмо: to=%s subject=%q text=%q", m.To, m.Subject, m.Text)
+			}
+		})
+	}
+}
