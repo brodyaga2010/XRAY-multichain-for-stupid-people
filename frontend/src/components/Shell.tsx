@@ -216,7 +216,7 @@ export function Shell({ user, onUserChange }: { user: User; onUserChange: (user:
 
       <nav
         aria-label="Основное меню"
-        className="fixed inset-x-0 bottom-0 z-30 grid auto-cols-fr grid-flow-col gap-1 border-t bg-background/90 px-2 pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] backdrop-blur md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 grid auto-cols-fr grid-flow-col gap-0.5 border-t bg-background/90 px-1 pt-1.5 min-[360px]:gap-1 min-[360px]:px-2 pb-[calc(0.375rem+env(safe-area-inset-bottom))] backdrop-blur md:hidden"
       >
         {nav.map((item) => (
           <button

@@ -154,12 +154,10 @@ export function HealthPanel({ status }: { status: MonitorStatus | null }) {
   return (
     <Card className="gap-4">
       <CardHeader>
-        <CardTitle className="flex items-baseline gap-2">
-          Проверки
-          {status.checked_at && (
-            <span className="text-xs font-normal text-muted-foreground tabular-nums">проверено в {formatTime(status.checked_at)}</span>
-          )}
-        </CardTitle>
+        <CardTitle>Проверки</CardTitle>
+        {status.checked_at && (
+          <CardDescription className="tabular-nums">Проверено в {formatTime(status.checked_at)}</CardDescription>
+        )}
         <CardAction>
           <Badge className={cn("border-0", badgeClass[summary.tone])}>{summary.text}</Badge>
         </CardAction>
@@ -170,11 +168,10 @@ export function HealthPanel({ status }: { status: MonitorStatus | null }) {
             <li key={check.id} className="flex gap-2.5 py-2 first:pt-0 last:pb-0">
               <Dot status={check.status} />
               <div className="grid min-w-0 flex-1 gap-0.5">
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="truncate text-sm font-medium" title={check.name}>
-                    {check.name}
-                  </span>
-                  <span className="shrink-0 text-sm text-muted-foreground tabular-nums">{check.value || STATUS_TEXT[check.status]}</span>
+                {/* Длинное значение на узком экране уходит под название, а не обрезает его. */}
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                  <span className="text-sm font-medium">{check.name}</span>
+                  <span className="text-sm text-muted-foreground tabular-nums">{check.value || STATUS_TEXT[check.status]}</span>
                 </div>
                 {CHECK_HINT[check.id] && <span className="text-xs text-muted-foreground">{CHECK_HINT[check.id]}</span>}
                 {check.detail && check.status !== "ok" && (
