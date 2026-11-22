@@ -182,7 +182,8 @@ func (m *Manager) Normalize() (bool, error) {
 	return true, m.restart()
 }
 
-// Bootstrap включает API/статистику, XHTTP inbound и служебный вход, переводит связь с выходом на TCP. Перезапускает Xray, если конфиг изменился.
+// Bootstrap включает API/статистику, XHTTP inbound и служебный вход, переводит связь с выходом на TCP,
+// включает или выключает раздельное туннелирование (XRAY_SPLIT_RU). Перезапускает Xray, если конфиг изменился.
 func (m *Manager) Bootstrap() (bool, error) {
 	unlock, err := m.lock()
 	if err != nil {
@@ -201,6 +202,9 @@ func (m *Manager) Bootstrap() (bool, error) {
 		changed = true
 	}
 	if m.switchExitToTCP(cfg) {
+		changed = true
+	}
+	if EnsureSplitRouting(cfg, m.cfg.XraySplitRU) {
 		changed = true
 	}
 	if EnsureExitHealthCheck(cfg) {

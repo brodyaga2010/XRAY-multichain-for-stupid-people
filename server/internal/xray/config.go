@@ -426,6 +426,74 @@ func EnsureProbeInbound(cfg Config, port int) bool {
 	return !reflect.DeepEqual(before, cfg)
 }
 
+// Раздельное туннелирование: правила с этими ruleTag кабинет добавляет и убирает сам.
+const (
+	SplitDomainRuleTag = "panel-split-ru-domain"
+	SplitIPRuleTag     = "panel-split-ru-ip"
+	DirectOutboundTag  = "direct"
+)
+
+// splitDomains — российские сайты: списки geosite и зоны .ru, .su, .рф.
+var splitDomains = []any{"geosite:category-ru", "geosite:category-gov-ru", "domain:ru", "domain:su", "domain:xn--p1ai"}
+
+// EnsureSplitRouting включает (enabled) или выключает раздельное туннелирование на входе: российские сайты
+// идут напрямую с входного сервера (outbound direct), остальное — как раньше, через выход.
+//
+// Сайт определяется по имени (sniffing на входах уже включён); российские IP (geoip:ru) учитываются только
+// для подключений по голому IP. domainStrategy не меняется (AsIs): если резолвить домены на входе ради
+// geoip, российский DNS вернёт заглушку РКН с российским IP для заблокированного сайта, и тот уйдёт мимо VPN.
+// Правила ставятся перед правилом to-exit и касаются только пользовательских входов (не panel-probe).
+// Возвращает true, если конфиг изменился.
+func EnsureSplitRouting(cfg Config, enabled bool) bool {
+	before := deepCopy(cfg)
+	routing := setDefaultObj(cfg, "routing")
+	var kept []any
+	for _, item := range asList(routing["rules"]) {
+		tag := asStr(asObj(item)["ruleTag"])
+		if tag != SplitDomainRuleTag && tag != SplitIPRuleTag {
+			kept = append(kept, item)
+		}
+	}
+	if enabled {
+		var inbounds []any
+		for _, inbound := range UserInbounds(cfg) {
+			inbounds = append(inbounds, asStr(inbound["tag"]))
+		}
+		if len(inbounds) > 0 {
+			split := []any{
+				map[string]any{"type": "field", "ruleTag": SplitDomainRuleTag, "inboundTag": inbounds,
+					"domain": append([]any(nil), splitDomains...), "outboundTag": DirectOutboundTag},
+				map[string]any{"type": "field", "ruleTag": SplitIPRuleTag, "inboundTag": append([]any(nil), inbounds...),
+					"ip": []any{"geoip:ru"}, "outboundTag": DirectOutboundTag},
+			}
+			at := len(kept)
+			for i, item := range kept {
+				if asStr(asObj(item)["outboundTag"]) == ExitOutboundTag {
+					at = i
+					break
+				}
+			}
+			kept = append(kept[:at:at], append(split, kept[at:]...)...)
+			ensureDirectOutbound(cfg)
+		}
+	}
+	if kept == nil {
+		kept = []any{}
+	}
+	routing["rules"] = kept
+	return !reflect.DeepEqual(before, cfg)
+}
+
+func ensureDirectOutbound(cfg Config) {
+	outbounds := asList(cfg["outbounds"])
+	for _, item := range outbounds {
+		if asStr(asObj(item)["tag"]) == DirectOutboundTag {
+			return
+		}
+	}
+	cfg["outbounds"] = append(outbounds, map[string]any{"protocol": "freedom", "tag": DirectOutboundTag})
+}
+
 // exitOutbound — outbound to-exit и его streamSettings; nil, если цепочки нет.
 func exitOutbound(cfg Config) (outbound, stream map[string]any) {
 	for _, item := range asList(cfg["outbounds"]) {

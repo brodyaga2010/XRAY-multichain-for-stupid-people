@@ -47,7 +47,9 @@ type Config struct {
 	XrayProbePort      int
 	// XrayExitTCPPort — порт TCP+Vision входа на выходном сервере: bootstrap-xray переводит на него
 	// связь с выходом, если она идёт через gRPC; 0 — транспорт не менять.
-	XrayExitTCPPort     int
+	XrayExitTCPPort int
+	// XraySplitRU — раздельное туннелирование: российские сайты вход открывает сам, через выход — остальное.
+	XraySplitRU         bool
 	StatsPollSeconds    int
 	OnlineWindowSeconds int
 
@@ -198,6 +200,7 @@ func Load(lookup Lookup) (*Config, error) {
 	str(&cfg.XrayPublicHost, "XRAY_PUBLIC_HOST")
 	num(&cfg.XrayProbePort, "XRAY_PROBE_PORT")
 	num(&cfg.XrayExitTCPPort, "XRAY_EXIT_TCP_PORT")
+	flag(&cfg.XraySplitRU, "XRAY_SPLIT_RU")
 	num(&cfg.StatsPollSeconds, "STATS_POLL_SECONDS")
 	num(&cfg.OnlineWindowSeconds, "ONLINE_WINDOW_SECONDS")
 	str(&cfg.ListenAddr, "LISTEN_ADDR")

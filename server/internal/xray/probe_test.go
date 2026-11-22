@@ -3,7 +3,9 @@ package xray
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -241,6 +243,80 @@ func TestBootstrapSwitchesExitToTCP(t *testing.T) {
 			}
 			if tt.wantNetwork == "grpc" && asObj(stream["grpcSettings"])["health_check_timeout"] == nil {
 				t.Error("оставшись на gRPC, связь должна проверяться (health_check_timeout)")
+			}
+		})
+	}
+}
+
+func TestEnsureSplitRouting(t *testing.T) {
+	const base = `{"inbounds":[{"tag":"user-inbound"},{"tag":"user-inbound-grpc"},{"tag":"panel-probe"}],
+		"outbounds":[{"tag":"to-exit"}%s],
+		"routing":{"rules":[{"type":"field","inboundTag":["api"],"outboundTag":"api"},
+			{"type":"field","inboundTag":["user-inbound","user-inbound-grpc","panel-probe"],"outboundTag":"to-exit"}]}}`
+	withDirect := fmt.Sprintf(base, `,{"protocol":"freedom","tag":"direct"}`)
+	noDirect := fmt.Sprintf(base, "")
+	ruleTags := func(cfg Config) []string {
+		var out []string
+		for _, item := range asList(asObj(cfg["routing"])["rules"]) {
+			rule := asObj(item)
+			out = append(out, asStr(rule["ruleTag"])+">"+asStr(rule["outboundTag"]))
+		}
+		return out
+	}
+	enabledRules := []string{">api", SplitDomainRuleTag + ">direct", SplitIPRuleTag + ">direct", ">to-exit"}
+	tests := []struct {
+		name        string
+		raw         string
+		steps       []bool // включить/выключить по очереди
+		wantChanged []bool
+		wantRules   []string
+	}{
+		{"включение — правила перед to-exit", withDirect, []bool{true}, []bool{true}, enabledRules},
+		{"повторное включение ничего не меняет", withDirect, []bool{true, true}, []bool{true, false}, enabledRules},
+		{"выключение убирает правила", withDirect, []bool{true, false}, []bool{true, true}, []string{">api", ">to-exit"}},
+		{"выключено и не было — без изменений", withDirect, []bool{false}, []bool{false}, []string{">api", ">to-exit"}},
+		{"нет outbound direct — добавляется", noDirect, []bool{true}, []bool{true}, enabledRules},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := ParseConfig([]byte(tt.raw))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i, enabled := range tt.steps {
+				if got := EnsureSplitRouting(cfg, enabled); got != tt.wantChanged[i] {
+					t.Errorf("шаг %d: changed = %v, want %v", i, got, tt.wantChanged[i])
+				}
+			}
+			if got := ruleTags(cfg); !reflect.DeepEqual(got, tt.wantRules) {
+				t.Errorf("правила = %v, want %v", got, tt.wantRules)
+			}
+			if !tt.steps[len(tt.steps)-1] {
+				return
+			}
+			rules := asList(asObj(cfg["routing"])["rules"])
+			domain, ip := asObj(rules[1]), asObj(rules[2])
+			inbounds, _ := json.Marshal(domain["inboundTag"])
+			if string(inbounds) != `["user-inbound","user-inbound-grpc"]` {
+				t.Errorf("inboundTag = %s — служебный вход panel-probe не должен идти напрямую", inbounds)
+			}
+			if d, _ := json.Marshal(domain["domain"]); !strings.Contains(string(d), "geosite:category-ru") || !strings.Contains(string(d), "domain:xn--p1ai") {
+				t.Errorf("domain = %s", d)
+			}
+			if ips, _ := json.Marshal(ip["ip"]); string(ips) != `["geoip:ru"]` {
+				t.Errorf("ip = %s", ips)
+			}
+			if asObj(cfg["routing"])["domainStrategy"] != nil {
+				t.Error("domainStrategy менять нельзя: резолв на входе вернёт заглушки РКН")
+			}
+			direct := 0
+			for _, o := range asList(cfg["outbounds"]) {
+				if asStr(asObj(o)["tag"]) == "direct" {
+					direct++
+				}
+			}
+			if direct != 1 {
+				t.Errorf("outbound direct: %d шт.", direct)
 			}
 		})
 	}
