@@ -1,1 +1,17 @@
 **/*.vpn
+
+# Frontend
+node_modules/
+dist/
+
+# Local deploy secrets/env
+deploy/.env
+deploy/deploy.env
+deploy/secrets/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+
+# Claude Code worktrees
+.claude/

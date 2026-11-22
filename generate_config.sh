@@ -134,7 +134,9 @@ cat > /tmp/exit_config.json <<EOF
 }
 EOF
 
-# Create relay config (RU) with first user added
+# Create relay config (RU) with first user added.
+# Связь с выходом — TCP + Vision (порт 443): через gRPC весь трафик шёл одним соединением, и когда его
+# замедляли, падала вся цепочка. Тег to-exit — его ищет кабинет (проверка цепочки, служебный вход).
 echo "Creating relay configuration..."
 cat > /tmp/relay_config.json <<EOF
 {
@@ -187,25 +189,22 @@ cat > /tmp/relay_config.json <<EOF
   "outbounds": [
     {
       "protocol": "vless",
-      "tag": "to-pl",
+      "tag": "to-exit",
       "settings": {
         "vnext": [{
           "address": "$EXIT_IP",
-          "port": 8443,
-          "users": [{"id": "$EXIT_UUID", "encryption": "none"}]
+          "port": 443,
+          "users": [{"id": "$EXIT_UUID", "flow": "xtls-rprx-vision", "encryption": "none"}]
         }]
       },
       "streamSettings": {
-        "network": "grpc",
+        "network": "tcp",
         "security": "reality",
         "realitySettings": {
           "serverName": "${EXIT_DEST}",
           "fingerprint": "chrome",
           "shortId": "$EXIT_SHORT",
           "publicKey": "$EXIT_PUB"
-        },
-        "grpcSettings": {
-          "serviceName": "xray_grpc_service"
         }
       }
     },
@@ -216,7 +215,7 @@ cat > /tmp/relay_config.json <<EOF
       {
         "type": "field",
         "inboundTag": ["user-inbound", "user-inbound-grpc"],
-        "outboundTag": "to-pl"
+        "outboundTag": "to-exit"
       }
     ]
   }
