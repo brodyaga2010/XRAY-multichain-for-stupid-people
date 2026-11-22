@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"strconv"
 	"strings"
 	"sync"
@@ -41,6 +42,8 @@ type cachedProfile struct {
 type Manager struct {
 	cfg    *config.Config
 	runner Runner
+	// dial проверяет, что TCP-порт выходного сервера открыт, до перехода на TCP (подменяется в тестах).
+	dial func(addr string) error
 
 	mu      sync.Mutex
 	profile *cachedProfile
@@ -51,7 +54,7 @@ type Manager struct {
 
 // NewManager создаёт менеджер поверх исполнителя команд.
 func NewManager(cfg *config.Config, runner Runner) *Manager {
-	return &Manager{cfg: cfg, runner: runner}
+	return &Manager{cfg: cfg, runner: runner, dial: dialTCP}
 }
 
 // Runner возвращает исполнитель (нужен тестам и dry-run).
@@ -179,7 +182,7 @@ func (m *Manager) Normalize() (bool, error) {
 	return true, m.restart()
 }
 
-// Bootstrap включает API/статистику, XHTTP inbound, служебный вход и проверку соединения до выхода. Перезапускает Xray, если конфиг изменился.
+// Bootstrap включает API/статистику, XHTTP inbound и служебный вход, переводит связь с выходом на TCP. Перезапускает Xray, если конфиг изменился.
 func (m *Manager) Bootstrap() (bool, error) {
 	unlock, err := m.lock()
 	if err != nil {
@@ -197,6 +200,9 @@ func (m *Manager) Bootstrap() (bool, error) {
 	if EnsureProbeInbound(cfg, m.cfg.XrayProbePort) {
 		changed = true
 	}
+	if m.switchExitToTCP(cfg) {
+		changed = true
+	}
 	if EnsureExitHealthCheck(cfg) {
 		changed = true
 	}
@@ -209,6 +215,33 @@ func (m *Manager) Bootstrap() (bool, error) {
 		}
 	}
 	return changed, nil
+}
+
+// switchExitToTCP переводит связь с выходом на TCP, только если его TCP-порт отвечает: иначе цепочка
+// осталась бы без связи. Если порт закрыт, остаётся gRPC (с проверкой соединения) и пишется предупреждение.
+func (m *Manager) switchExitToTCP(cfg Config) bool {
+	port := m.cfg.XrayExitTCPPort
+	if port <= 0 || !ExitUsesGRPC(cfg) {
+		return false
+	}
+	host, _, ok := ExitServer(cfg)
+	if !ok {
+		return false
+	}
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
+	if err := m.dial(addr); err != nil {
+		slog.Warn("связь с выходным сервером остаётся на gRPC: TCP-порт не отвечает", "addr", addr, "error", err)
+		return false
+	}
+	return EnsureExitTCP(cfg, port)
+}
+
+func dialTCP(addr string) error {
+	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	return conn.Close()
 }
 
 // ExitServer — адрес выходного сервера из текущего конфига; ok=false, если цепочки нет.

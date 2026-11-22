@@ -33,18 +33,21 @@ type Config struct {
 	AuthRateWindowSeconds int
 	TrustedProxies        string
 
-	XrayMode            string
-	XrayDryRun          bool
-	XrayConfigPath      string
-	XrayBackupDir       string
-	XrayBackupKeep      int
-	XrayLockPath        string
-	XrayBinary          string
-	XrayAPIServer       string
-	XrayRestartCommand  string
-	XrayXHTTPPort       int
-	XrayPublicHost      string
-	XrayProbePort       int
+	XrayMode           string
+	XrayDryRun         bool
+	XrayConfigPath     string
+	XrayBackupDir      string
+	XrayBackupKeep     int
+	XrayLockPath       string
+	XrayBinary         string
+	XrayAPIServer      string
+	XrayRestartCommand string
+	XrayXHTTPPort      int
+	XrayPublicHost     string
+	XrayProbePort      int
+	// XrayExitTCPPort — порт TCP+Vision входа на выходном сервере: bootstrap-xray переводит на него
+	// связь с выходом, если она идёт через gRPC; 0 — транспорт не менять.
+	XrayExitTCPPort     int
 	StatsPollSeconds    int
 	OnlineWindowSeconds int
 
@@ -104,6 +107,7 @@ func Defaults() Config {
 		XrayXHTTPPort:           2053,
 		XrayPublicHost:          "127.0.0.1",
 		XrayProbePort:           10811,
+		XrayExitTCPPort:         443,
 		StatsPollSeconds:        15,
 		OnlineWindowSeconds:     60,
 		ListenAddr:              "127.0.0.1:8000",
@@ -186,6 +190,7 @@ func Load(lookup Lookup) (*Config, error) {
 	num(&cfg.XrayXHTTPPort, "XRAY_XHTTP_PORT")
 	str(&cfg.XrayPublicHost, "XRAY_PUBLIC_HOST")
 	num(&cfg.XrayProbePort, "XRAY_PROBE_PORT")
+	num(&cfg.XrayExitTCPPort, "XRAY_EXIT_TCP_PORT")
 	num(&cfg.StatsPollSeconds, "STATS_POLL_SECONDS")
 	num(&cfg.OnlineWindowSeconds, "ONLINE_WINDOW_SECONDS")
 	str(&cfg.ListenAddr, "LISTEN_ADDR")

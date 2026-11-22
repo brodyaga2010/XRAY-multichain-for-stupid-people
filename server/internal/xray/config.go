@@ -426,6 +426,48 @@ func EnsureProbeInbound(cfg Config, port int) bool {
 	return !reflect.DeepEqual(before, cfg)
 }
 
+// exitOutbound — outbound to-exit и его streamSettings; nil, если цепочки нет.
+func exitOutbound(cfg Config) (outbound, stream map[string]any) {
+	for _, item := range asList(cfg["outbounds"]) {
+		if o := asObj(item); o != nil && asStr(o["tag"]) == ExitOutboundTag {
+			return o, asObj(o["streamSettings"])
+		}
+	}
+	return nil, nil
+}
+
+// ExitUsesGRPC — связь с выходным сервером идёт через gRPC.
+func ExitUsesGRPC(cfg Config) bool {
+	_, stream := exitOutbound(cfg)
+	return stream != nil && asStr(stream["network"]) == "grpc"
+}
+
+// EnsureExitTCP переводит связь с выходным сервером с gRPC на TCP + Vision (порт port того же сервера,
+// тот же ключ и REALITY). Через gRPC весь трафик пользователей идёт одним соединением, и когда его
+// замедляют, падает вся цепочка; по TCP каждое подключение — отдельным соединением.
+// Возвращает true, если конфиг изменился.
+func EnsureExitTCP(cfg Config, port int) bool {
+	outbound, stream := exitOutbound(cfg)
+	if port <= 0 || stream == nil || asStr(stream["network"]) != "grpc" {
+		return false
+	}
+	stream["network"] = "tcp"
+	delete(stream, "grpcSettings")
+	for _, item := range asList(asObj(outbound["settings"])["vnext"]) {
+		server := asObj(item)
+		if server == nil {
+			continue
+		}
+		server["port"] = port
+		for _, user := range asList(server["users"]) {
+			if u := asObj(user); u != nil {
+				u["flow"] = "xtls-rprx-vision"
+			}
+		}
+	}
+	return true
+}
+
 // Проверка gRPC-соединения до выходного сервера: если ответов нет exitIdleTimeout секунд, Xray шлёт ping
 // и рвёт соединение, когда за exitHealthTimeout секунд ответа нет. Все пользователи идут через одно такое
 // соединение, и без проверки «замёрзшее» соединение висит, пока Xray не перезапустят.
@@ -434,25 +476,20 @@ const (
 	exitHealthTimeout = 10
 )
 
-// EnsureExitHealthCheck включает проверку соединения в outbound to-exit, если он работает через gRPC.
+// EnsureExitHealthCheck включает проверку соединения в outbound to-exit, если он остался на gRPC
+// (XRAY_EXIT_TCP_PORT=0 или выходной сервер недоступен по TCP).
 // Заданные вручную значения не трогает. Возвращает true, если конфиг изменился.
 func EnsureExitHealthCheck(cfg Config) bool {
+	if !ExitUsesGRPC(cfg) {
+		return false
+	}
+	_, stream := exitOutbound(cfg)
+	grpc := setDefaultObj(stream, "grpcSettings")
 	changed := false
-	for _, item := range asList(cfg["outbounds"]) {
-		outbound := asObj(item)
-		if outbound == nil || asStr(outbound["tag"]) != ExitOutboundTag {
-			continue
-		}
-		stream := asObj(outbound["streamSettings"])
-		if stream == nil || asStr(stream["network"]) != "grpc" {
-			continue
-		}
-		grpc := setDefaultObj(stream, "grpcSettings")
-		for key, value := range map[string]int{"idle_timeout": exitIdleTimeout, "health_check_timeout": exitHealthTimeout} {
-			if _, ok := grpc[key]; !ok {
-				grpc[key] = value
-				changed = true
-			}
+	for key, value := range map[string]int{"idle_timeout": exitIdleTimeout, "health_check_timeout": exitHealthTimeout} {
+		if _, ok := grpc[key]; !ok {
+			grpc[key] = value
+			changed = true
 		}
 	}
 	return changed
