@@ -56,7 +56,7 @@ type Config struct {
 	// Telegram-бот для уведомлений администратору; пустой токен — бот выключен.
 	TelegramBotToken     string
 	TelegramAdminChatIDs string
-	// TelegramAlertChatIDs — чаты (например, группа), куда идут только тревоги о работе системы;
+	// TelegramAlertChatIDs — чаты (например, группа), куда идут только тревоги мониторинга VPN;
 	// команды и кнопки оттуда бот не принимает.
 	TelegramAlertChatIDs string
 	TelegramAPIURL       string
@@ -328,7 +328,7 @@ func (c *Config) TelegramAdminChats() ([]int64, error) {
 	return parseChatIDs(c.TelegramAdminChatIDs, "TELEGRAM_ADMIN_CHAT_IDS")
 }
 
-// TelegramAlertChats — чаты только для тревог о работе системы (TELEGRAM_ALERT_CHAT_IDS).
+// TelegramAlertChats — чаты только для тревог мониторинга VPN (TELEGRAM_ALERT_CHAT_IDS).
 func (c *Config) TelegramAlertChats() ([]int64, error) {
 	return parseChatIDs(c.TelegramAlertChatIDs, "TELEGRAM_ALERT_CHAT_IDS")
 }

@@ -17,14 +17,14 @@ type StatusSource interface {
 // SetStatusSource подключает кнопку «Состояние»; nil — мониторинг выключен.
 func (b *Bot) SetStatusSource(s StatusSource) { b.status = s }
 
-// Alert отправляет тревогу о работе системы (мониторинг VPN, сбой копии базы) администраторам
-// и в чаты из SetAlertChats (реализует monitor.Notifier).
+// Alert отправляет тревогу мониторинга VPN администраторам и в чаты из SetAlertChats
+// (реализует monitor.Notifier).
 func (b *Bot) Alert(ctx context.Context, text string) {
 	b.alert(ctx, append(append([]int64(nil), b.chats...), b.alertChats...), text)
 }
 
-// AdminAlerts — получатель сообщений только для администраторов: в них данные пользователей
-// (например, email в «закончилась подписка»), им не место в общей группе.
+// AdminAlerts — получатель сообщений только для администраторов: окончание подписки (там email
+// пользователя), сбой копии базы.
 func (b *Bot) AdminAlerts() interface{ Alert(context.Context, string) } { return adminAlerts{b} }
 
 type adminAlerts struct{ b *Bot }

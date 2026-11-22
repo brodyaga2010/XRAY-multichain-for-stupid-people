@@ -109,10 +109,10 @@ func TestAlertChats(t *testing.T) {
 		alert func(b *Bot)
 		want  []int64
 	}{
-		{"тревога о работе системы — админу и в группу", func(b *Bot) {
+		{"тревога мониторинга VPN — админу и в группу", func(b *Bot) {
 			b.Alert(context.Background(), "🔴 Цепочка")
 		}, []int64{adminChat, group}},
-		{"с данными пользователя (подписка) — только админу", func(b *Bot) {
+		{"подписка, сбой копии базы — только админу", func(b *Bot) {
 			b.AdminAlerts().Alert(context.Background(), "⏰ Закончилась подписка: user@example.com")
 		}, []int64{adminChat}},
 		{"заявка — только админу", func(b *Bot) {

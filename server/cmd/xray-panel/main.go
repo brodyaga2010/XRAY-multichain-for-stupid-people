@@ -365,6 +365,11 @@ func backupLabel(host string) string {
 	return label
 }
 
+// adminBackupSender — копия базы и сообщение о её сбое уходят только администраторам, не в чаты тревог.
+type adminBackupSender struct{ *telegram.Bot }
+
+func (s adminBackupSender) Alert(ctx context.Context, text string) { s.AdminAlerts().Alert(ctx, text) }
+
 // startBackup запускает ежедневную копию базы в Telegram; без бота, при BACKUP_HOUR=-1
 // или базе в памяти копии нет.
 func startBackup(ctx context.Context, cfg *config.Config, st *store.Store, rb runningBot) <-chan struct{} {
@@ -374,7 +379,7 @@ func startBackup(ctx context.Context, cfg *config.Config, st *store.Store, rb ru
 		close(done)
 		return done
 	}
-	b := backup.New(st, rb.bot, filepath.Dir(path), backupLabel(cfg.XrayPublicHost))
+	b := backup.New(st, adminBackupSender{rb.bot}, filepath.Dir(path), backupLabel(cfg.XrayPublicHost))
 	rb.bot.SetBackup(b.RunOnce)
 	go func() {
 		defer close(done)

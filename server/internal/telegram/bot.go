@@ -41,7 +41,7 @@ type Bot struct {
 	api    *Client
 	admins map[int64]bool
 	chats  []int64
-	// alertChats — чаты только для тревог о работе системы: сообщения оттуда бот молча пропускает.
+	// alertChats — чаты только для тревог мониторинга VPN: сообщения оттуда бот молча пропускает.
 	alertChats []int64
 	alertOnly  map[int64]bool
 	mod        Moderator
@@ -68,9 +68,8 @@ func New(api *Client, adminChats []int64, mod Moderator) *Bot {
 	}
 }
 
-// SetAlertChats задаёт чаты (например, группу), куда кроме администраторов идут тревоги о работе системы:
-// мониторинг VPN и сбой копии базы. Заявки, подписки и сами копии туда не попадают; команды и кнопки
-// из этих чатов не принимаются.
+// SetAlertChats задаёт чаты (например, группу), куда кроме администраторов идут тревоги мониторинга VPN.
+// Заявки, подписки, копии базы и их сбои туда не попадают; команды и кнопки из этих чатов не принимаются.
 func (b *Bot) SetAlertChats(chats []int64) {
 	b.alertChats, b.alertOnly = nil, map[int64]bool{}
 	for _, id := range chats {
