@@ -44,6 +44,15 @@ type Notifier interface {
 	Alert(ctx context.Context, text string)
 }
 
+// Recovery — автоматическое действие при подтверждённом сбое проверки (перезапуск Xray при сбое цепочки).
+type Recovery struct {
+	CheckID  string
+	Cooldown time.Duration // не чаще одного раза за этот срок
+	Action   func(ctx context.Context) error
+	// Done и Failed — тексты сообщений после действия (Failed получает ошибку через %v).
+	Done, Failed string
+}
+
 // Point — точка истории задержки; Ms == nil — проверка не прошла.
 type Point struct {
 	At     time.Time
@@ -97,6 +106,8 @@ type Monitor struct {
 	threshold int
 	notifier  Notifier
 	persist   Persister
+	recovery  *Recovery
+	recovered time.Time // когда последний раз выполнялось действие Recovery
 	log       *slog.Logger
 	now       func() time.Time
 
@@ -130,6 +141,13 @@ func New(checks []Check, interval time.Duration, threshold int) *Monitor {
 func (m *Monitor) SetNotifier(n Notifier) {
 	m.mu.Lock()
 	m.notifier = n
+	m.mu.Unlock()
+}
+
+// SetRecovery включает автоматическое действие при сбое; nil — выключить.
+func (m *Monitor) SetRecovery(r *Recovery) {
+	m.mu.Lock()
+	m.recovery = r
 	m.mu.Unlock()
 }
 
@@ -184,6 +202,7 @@ func (m *Monitor) RunOnce(ctx context.Context) {
 		}
 	}
 	m.checkedAt = now
+	recovery := m.dueRecovery(now)
 	notifier, persist := m.notifier, m.persist
 	points, incidents := m.newPoints, m.newIncidents
 	m.newPoints, m.newIncidents = nil, nil
@@ -193,12 +212,39 @@ func (m *Monitor) RunOnce(ctx context.Context) {
 		m.flush(ctx, persist, points, incidents, now)
 	}
 
+	if recovery != nil {
+		if err := recovery.Action(ctx); err != nil {
+			messages = append(messages, fmt.Sprintf(recovery.Failed, err))
+		} else {
+			messages = append(messages, recovery.Done)
+		}
+	}
+
 	for _, msg := range messages {
 		m.log.Warn("мониторинг", "событие", msg)
 		if notifier != nil {
 			notifier.Alert(ctx, msg)
 		}
 	}
+}
+
+// dueRecovery — пора ли выполнить автоматическое действие: сбой проверки подтверждён (тревога отправлена),
+// она не работает совсем (fail, а не «медленно»), и с прошлого раза прошло не меньше Cooldown.
+// Вызывается под m.mu; запоминает время, чтобы действие не повторялось каждый цикл.
+func (m *Monitor) dueRecovery(now time.Time) *Recovery {
+	r := m.recovery
+	if r == nil || r.Action == nil {
+		return nil
+	}
+	st := m.states[r.CheckID]
+	if st == nil || !st.Alerted || st.Result.Status != StatusFail {
+		return nil
+	}
+	if !m.recovered.IsZero() && now.Sub(m.recovered) < r.Cooldown {
+		return nil
+	}
+	m.recovered = now
+	return r
 }
 
 func runCheck(ctx context.Context, c Check) (result Result) {

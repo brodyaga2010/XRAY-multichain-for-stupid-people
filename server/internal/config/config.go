@@ -67,6 +67,9 @@ type Config struct {
 	MonitorProbeURL        string
 	MonitorChainSlowMs     int
 	MonitorExitSlowMs      int
+	// MonitorAutoRestartMinutes — при подтверждённом сбое цепочки перезапускать Xray не чаще раза
+	// в столько минут; 0 — не перезапускать.
+	MonitorAutoRestartMinutes int
 
 	// Ежедневная копия базы в чат администратора Telegram: час по местному времени (TZ); -1 — выключено.
 	BackupHour int
@@ -87,41 +90,42 @@ const DefaultJWTSecret = "change-me-in-production"
 // Defaults возвращает настройки со значениями по умолчанию.
 func Defaults() Config {
 	return Config{
-		DatabaseURL:             "sqlite:///panel.db",
-		JWTSecret:               DefaultJWTSecret,
-		AccessTokenMinutes:      60 * 24,
-		CookieName:              "xray_access_token",
-		CORSOrigins:             "http://localhost:5173,http://localhost:8080",
-		DefaultKeyLimit:         3,
-		PublicBaseURL:           "http://localhost:5173",
-		SubscriptionTitle:       "Personal",
-		SubscriptionUpdateHours: 12,
-		AuthRateLimit:           10,
-		AuthRateWindowSeconds:   300,
-		TrustedProxies:          "127.0.0.1,::1",
-		XrayMode:                "dry_run",
-		XrayConfigPath:          "/usr/local/etc/xray/config.json",
-		XrayBackupDir:           "/var/lib/xray-panel/backups",
-		XrayBackupKeep:          30,
-		XrayLockPath:            "/run/xray-panel/config.lock",
-		XrayBinary:              "xray",
-		XrayAPIServer:           "127.0.0.1:10085",
-		XrayRestartCommand:      "systemctl restart xray",
-		XrayXHTTPPort:           2053,
-		XrayPublicHost:          "127.0.0.1",
-		XrayProbePort:           10811,
-		XrayExitTCPPort:         443,
-		StatsPollSeconds:        15,
-		OnlineWindowSeconds:     60,
-		ListenAddr:              "127.0.0.1:8000",
-		TelegramAPIURL:          "https://api.telegram.org",
-		MonitorIntervalSeconds:  60,
-		MonitorFailThreshold:    3,
-		MonitorProbeURL:         "https://www.google.com/generate_204",
-		MonitorChainSlowMs:      3000,
-		MonitorExitSlowMs:       300,
-		BackupHour:              4,
-		SMTPPort:                465,
+		DatabaseURL:               "sqlite:///panel.db",
+		JWTSecret:                 DefaultJWTSecret,
+		AccessTokenMinutes:        60 * 24,
+		CookieName:                "xray_access_token",
+		CORSOrigins:               "http://localhost:5173,http://localhost:8080",
+		DefaultKeyLimit:           3,
+		PublicBaseURL:             "http://localhost:5173",
+		SubscriptionTitle:         "Personal",
+		SubscriptionUpdateHours:   12,
+		AuthRateLimit:             10,
+		AuthRateWindowSeconds:     300,
+		TrustedProxies:            "127.0.0.1,::1",
+		XrayMode:                  "dry_run",
+		XrayConfigPath:            "/usr/local/etc/xray/config.json",
+		XrayBackupDir:             "/var/lib/xray-panel/backups",
+		XrayBackupKeep:            30,
+		XrayLockPath:              "/run/xray-panel/config.lock",
+		XrayBinary:                "xray",
+		XrayAPIServer:             "127.0.0.1:10085",
+		XrayRestartCommand:        "systemctl restart xray",
+		XrayXHTTPPort:             2053,
+		XrayPublicHost:            "127.0.0.1",
+		XrayProbePort:             10811,
+		XrayExitTCPPort:           443,
+		StatsPollSeconds:          15,
+		OnlineWindowSeconds:       60,
+		ListenAddr:                "127.0.0.1:8000",
+		TelegramAPIURL:            "https://api.telegram.org",
+		MonitorIntervalSeconds:    60,
+		MonitorFailThreshold:      3,
+		MonitorProbeURL:           "https://www.google.com/generate_204",
+		MonitorChainSlowMs:        3000,
+		MonitorExitSlowMs:         300,
+		MonitorAutoRestartMinutes: 30,
+		BackupHour:                4,
+		SMTPPort:                  465,
 	}
 }
 
@@ -206,6 +210,7 @@ func Load(lookup Lookup) (*Config, error) {
 	str(&cfg.MonitorProbeURL, "MONITOR_PROBE_URL")
 	num(&cfg.MonitorChainSlowMs, "MONITOR_CHAIN_SLOW_MS")
 	num(&cfg.MonitorExitSlowMs, "MONITOR_EXIT_SLOW_MS")
+	num(&cfg.MonitorAutoRestartMinutes, "MONITOR_AUTO_RESTART_MINUTES")
 	num(&cfg.BackupHour, "BACKUP_HOUR")
 	str(&cfg.SMTPHost, "SMTP_HOST")
 	num(&cfg.SMTPPort, "SMTP_PORT")

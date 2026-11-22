@@ -244,6 +244,16 @@ func dialTCP(addr string) error {
 	return conn.Close()
 }
 
+// Restart перезапускает Xray (автовосстановление цепочки); конфиг не меняется.
+func (m *Manager) Restart() error {
+	unlock, err := m.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return m.restart()
+}
+
 // ExitServer — адрес выходного сервера из текущего конфига; ok=false, если цепочки нет.
 func (m *Manager) ExitServer() (host string, port int, ok bool, err error) {
 	cfg, err := m.readConfig()

@@ -270,7 +270,18 @@ func newMonitor(cfg *config.Config, manager *xray.Manager) *monitor.Monitor {
 		return nil
 	}
 	interval := time.Duration(cfg.MonitorIntervalSeconds) * time.Second
-	return monitor.New(monitor.DefaultChecks(monitorDeps(cfg, manager)), interval, cfg.MonitorFailThreshold)
+	mon := monitor.New(monitor.DefaultChecks(monitorDeps(cfg, manager)), interval, cfg.MonitorFailThreshold)
+	if cfg.MonitorAutoRestartMinutes > 0 {
+		mon.SetRecovery(&monitor.Recovery{
+			CheckID:  monitor.CheckChain,
+			Cooldown: time.Duration(cfg.MonitorAutoRestartMinutes) * time.Minute,
+			Action:   func(context.Context) error { return manager.Restart() },
+			Done: fmt.Sprintf("🔄 Xray перезапущен автоматически — цепочка не работала. Если не поможет, "+
+				"следующая попытка не раньше чем через %d мин.", cfg.MonitorAutoRestartMinutes),
+			Failed: "⚠️ Не удалось автоматически перезапустить Xray: %v",
+		})
+	}
+	return mon
 }
 
 // monitorDeps — откуда проверки берут данные; в dry_run Xray нет, остаются только диск и память.

@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"strings"
@@ -286,5 +287,49 @@ func TestRestoreWithoutPersister(t *testing.T) {
 	m, _, _ := newTestMonitor(1)
 	if err := m.Restore(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRecovery(t *testing.T) {
+	const ok, warn, fail = StatusOK, StatusWarn, StatusFail
+	tests := []struct {
+		name      string
+		statuses  []Status // по одному на минуту
+		cooldown  time.Duration
+		actionErr error
+		wantRuns  int
+		want      []string // префиксы сообщений по порядку
+	}{
+		{"сбой подтверждён — перезапуск сразу после тревоги", []Status{fail, fail, fail, ok}, 30 * time.Minute, nil, 1,
+			[]string{"🔴", "🔄 перезапущен", "🟢"}},
+		{"ниже порога — не трогаем", []Status{fail, fail, ok}, 30 * time.Minute, nil, 0, nil},
+		{"медленно (warn) — не перезапускаем", []Status{warn, warn, warn, warn}, 30 * time.Minute, nil, 0, []string{"🟡"}},
+		{"долгий сбой — не чаще раза за cooldown", []Status{fail, fail, fail, fail, fail, fail, fail}, 3 * time.Minute, nil, 2,
+			[]string{"🔴", "🔄", "🔄"}},
+		{"ошибка перезапуска — сообщаем", []Status{fail, fail, fail}, 30 * time.Minute, errors.New("нет прав"), 1,
+			[]string{"🔴", "⚠️ не вышло: нет прав"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, rec, clock := newTestMonitor(3, scripted("a", tt.statuses...))
+			runs := 0
+			m.SetRecovery(&Recovery{CheckID: "a", Cooldown: tt.cooldown,
+				Action: func(context.Context) error { runs++; return tt.actionErr },
+				Done:   "🔄 перезапущен", Failed: "⚠️ не вышло: %v"})
+
+			for range tt.statuses {
+				m.RunOnce(context.Background())
+				*clock = clock.Add(time.Minute)
+			}
+
+			if runs != tt.wantRuns || len(rec.msgs) != len(tt.want) {
+				t.Fatalf("перезапусков %d (want %d), сообщения = %q, want %q", runs, tt.wantRuns, rec.msgs, tt.want)
+			}
+			for i, prefix := range tt.want {
+				if !strings.HasPrefix(rec.msgs[i], prefix) {
+					t.Errorf("сообщение %d = %q, want prefix %q", i, rec.msgs[i], prefix)
+				}
+			}
+		})
 	}
 }

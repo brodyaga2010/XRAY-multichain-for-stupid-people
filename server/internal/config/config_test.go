@@ -26,7 +26,7 @@ func TestDefaultsMatchPythonSettings(t *testing.T) {
 		XrayRestartCommand: "systemctl restart xray", XrayXHTTPPort: 2053, XrayPublicHost: "127.0.0.1", XrayProbePort: 10811, XrayExitTCPPort: 443,
 		StatsPollSeconds: 15, OnlineWindowSeconds: 60, ListenAddr: "127.0.0.1:8000", TelegramAPIURL: "https://api.telegram.org",
 		MonitorIntervalSeconds: 60, MonitorFailThreshold: 3, MonitorProbeURL: "https://www.google.com/generate_204",
-		MonitorChainSlowMs: 3000, MonitorExitSlowMs: 300, BackupHour: 4,
+		MonitorChainSlowMs: 3000, MonitorExitSlowMs: 300, MonitorAutoRestartMinutes: 30, BackupHour: 4,
 		SMTPPort: 465, SMTPFromName: "Personal",
 	}
 	if *cfg != want {

@@ -397,3 +397,16 @@ func TestLocalRunnerFilesAndLock(t *testing.T) {
 		t.Errorf("удаление несуществующего файла не должно быть ошибкой: %v", err)
 	}
 }
+
+func TestRestartRunsCommandWithoutTouchingConfig(t *testing.T) {
+	m, runner, cfg := newTestManager(t)
+	before := runner.Files[cfg.XrayConfigPath]
+
+	if err := m.Restart(); err != nil {
+		t.Fatal(err)
+	}
+
+	if !hasCommand(runner, restartCommand(cfg)) || runner.Files[cfg.XrayConfigPath] != before {
+		t.Errorf("команды %v; конфиг изменился: %v", runner.Commands, runner.Files[cfg.XrayConfigPath] != before)
+	}
+}

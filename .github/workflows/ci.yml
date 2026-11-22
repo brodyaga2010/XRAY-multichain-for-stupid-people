@@ -40,3 +40,10 @@ jobs:
         run: npm test
       - name: Сборка
         run: npm run build
+
+  watchdog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Тесты внешнего сторожа
+        run: bash deploy/watchdog/entry_watchdog_test.sh
