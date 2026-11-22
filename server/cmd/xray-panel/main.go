@@ -352,7 +352,13 @@ func startBot(ctx context.Context, cfg *config.Config, app *api.App, mon *monito
 		close(done)
 		return runningBot{done: done}
 	}
-	bot := telegram.New(telegram.NewClient(cfg.TelegramAPIURL, cfg.TelegramBotToken), chats, app)
+	client := telegram.NewClient(cfg.TelegramAPIURL, cfg.TelegramBotToken)
+	if proxy := cfg.TelegramProxyURL(); proxy != "" {
+		if err := client.UseProxy(proxy); err != nil {
+			slog.Warn("telegram: прокси не подключён, бот ходит напрямую", "error", err)
+		}
+	}
+	bot := telegram.New(client, chats, app)
 	alertChats, _ := cfg.TelegramAlertChats() // формат уже проверен в config.Load
 	bot.SetAlertChats(alertChats)
 	app.SetNotifier(bot)

@@ -62,6 +62,9 @@ type Config struct {
 	// команды и кнопки оттуда бот не принимает.
 	TelegramAlertChatIDs string
 	TelegramAPIURL       string
+	// TelegramProxy — через что бот ходит в Telegram: пусто — через служебный вход Xray (выходной сервер),
+	// если он есть, с запасным прямым путём; "direct" — напрямую; иначе адрес прокси (socks5://…).
+	TelegramProxy string
 
 	// Мониторинг цепочки и сервера; MonitorIntervalSeconds = 0 — выключен.
 	MonitorIntervalSeconds int
@@ -208,6 +211,7 @@ func Load(lookup Lookup) (*Config, error) {
 	str(&cfg.TelegramAdminChatIDs, "TELEGRAM_ADMIN_CHAT_IDS")
 	str(&cfg.TelegramAlertChatIDs, "TELEGRAM_ALERT_CHAT_IDS")
 	str(&cfg.TelegramAPIURL, "TELEGRAM_API_URL")
+	str(&cfg.TelegramProxy, "TELEGRAM_PROXY")
 	num(&cfg.MonitorIntervalSeconds, "MONITOR_INTERVAL_SECONDS")
 	num(&cfg.MonitorFailThreshold, "MONITOR_FAIL_THRESHOLD")
 	str(&cfg.MonitorProbeURL, "MONITOR_PROBE_URL")
@@ -351,6 +355,20 @@ func parseChatIDs(raw, name string) ([]int64, error) {
 		chats = append(chats, id)
 	}
 	return chats, nil
+}
+
+// TelegramProxyURL — прокси для бота: явный TELEGRAM_PROXY, иначе служебный вход Xray (только на
+// настоящем Xray); "" — напрямую.
+func (c *Config) TelegramProxyURL() string {
+	switch {
+	case c.TelegramProxy == "direct":
+		return ""
+	case c.TelegramProxy != "":
+		return c.TelegramProxy
+	case c.XrayProbePort > 0 && c.EffectiveXrayMode() == "local":
+		return fmt.Sprintf("socks5://127.0.0.1:%d", c.XrayProbePort)
+	}
+	return ""
 }
 
 // EffectiveXrayMode учитывает устаревший флаг XRAY_DRY_RUN.

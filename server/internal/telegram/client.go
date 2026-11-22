@@ -7,26 +7,61 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
 // Client вызывает методы Bot API (https://core.telegram.org/bots/api).
+//
+// С прокси (UseProxy) запрос сначала идёт через него, а если не прошёл — напрямую; после такой неудачи
+// клиент directFor ходит напрямую сразу. Так бот на российском сервере обходит замедление Telegram через
+// VPN-цепочку, но не теряет связь, когда лежит сама цепочка (как раз тогда нужно отправить тревогу).
 type Client struct {
 	base string // <api>/bot<token>/ — содержит токен, наружу не выводится
 	http *http.Client
+	via  *http.Client // через прокси; nil — только напрямую
+	log  *slog.Logger
+
+	// proxyTimeout — сколько ждать ответа через прокси (getUpdates — дольше на время long polling).
+	proxyTimeout time.Duration
+	directFor    time.Duration
+
+	mu          sync.Mutex
+	directUntil time.Time
+	now         func() time.Time
 }
+
+const (
+	clientTimeout = 70 * time.Second // больше таймаута long polling (getUpdates держит соединение до 50 с)
+	pollSlack     = 20 * time.Second
+)
 
 // NewClient создаёт клиента; apiURL обычно https://api.telegram.org.
 func NewClient(apiURL, token string) *Client {
 	return &Client{
-		base: strings.TrimRight(apiURL, "/") + "/bot" + token + "/",
-		// больше таймаута long polling (getUpdates держит соединение до 50 с)
-		http: &http.Client{Timeout: 70 * time.Second},
+		base:         strings.TrimRight(apiURL, "/") + "/bot" + token + "/",
+		http:         &http.Client{Timeout: clientTimeout},
+		log:          slog.Default(),
+		proxyTimeout: 20 * time.Second,
+		directFor:    5 * time.Minute,
+		now:          time.Now,
 	}
+}
+
+// UseProxy направляет запросы через прокси (http://, https:// или socks5://) с запасным прямым путём.
+func (c *Client) UseProxy(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "socks5") {
+		return fmt.Errorf("прокси для Telegram: нужен адрес вида socks5://127.0.0.1:10811, получено %q", rawURL)
+	}
+	c.via = &http.Client{Timeout: clientTimeout, Transport: &http.Transport{Proxy: http.ProxyURL(u)}}
+	return nil
 }
 
 // APIError — ответ Telegram с ok=false.
@@ -124,7 +159,7 @@ func (c *Client) post(ctx context.Context, method, contentType string, body []by
 		return fmt.Errorf("telegram %s: некорректный адрес API", method)
 	}
 	req.Header.Set("Content-Type", contentType)
-	resp, err := c.http.Do(req)
+	resp, err := c.do(ctx, method, req, body)
 	if err != nil {
 		// url.Error содержит адрес с токеном — в логи идёт только причина
 		var urlErr *url.Error
@@ -145,6 +180,57 @@ func (c *Client) post(ctx context.Context, method, contentType string, body []by
 		return json.Unmarshal(r.Result, result)
 	}
 	return nil
+}
+
+// do отправляет запрос через прокси, а если тот не ответил — напрямую (см. Client).
+func (c *Client) do(ctx context.Context, method string, req *http.Request, body []byte) (*http.Response, error) {
+	if c.via == nil || c.useDirect() {
+		return c.http.Do(req)
+	}
+	timeout := c.proxyTimeout
+	if method == "getUpdates" {
+		timeout = clientTimeout - pollSlack/2
+	}
+	pctx, cancel := context.WithTimeout(ctx, timeout)
+	resp, err := c.via.Do(req.Clone(pctx))
+	if err == nil {
+		// тело читается после возврата — контекст отменяем, когда его закроют
+		resp.Body = cancelOnClose{resp.Body, cancel}
+		return resp, nil
+	}
+	cancel()
+	if ctx.Err() != nil {
+		return nil, err // остановка сервиса — не повторяем
+	}
+	c.mu.Lock()
+	c.directUntil = c.now().Add(c.directFor)
+	c.mu.Unlock()
+	reason := err
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		reason = urlErr.Err // в url.Error адрес с токеном
+	}
+	c.log.Warn("telegram: через прокси не прошло, отправляю напрямую", "method", method, "error", reason)
+	direct := req.Clone(ctx)
+	direct.Body = io.NopCloser(bytes.NewReader(body))
+	return c.http.Do(direct)
+}
+
+func (c *Client) useDirect() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now().Before(c.directUntil)
+}
+
+type cancelOnClose struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (b cancelOnClose) Close() error {
+	err := b.ReadCloser.Close()
+	b.cancel()
+	return err
 }
 
 // GetMe возвращает самого бота (проверка токена).

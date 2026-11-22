@@ -199,3 +199,24 @@ func TestTelegramChats(t *testing.T) {
 		})
 	}
 }
+
+func TestTelegramProxyURL(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  Config
+		want string
+	}{
+		{"по умолчанию — служебный вход Xray", Config{XrayMode: "local", XrayProbePort: 10811}, "socks5://127.0.0.1:10811"},
+		{"direct — напрямую", Config{XrayMode: "local", XrayProbePort: 10811, TelegramProxy: "direct"}, ""},
+		{"явный прокси", Config{XrayMode: "local", XrayProbePort: 10811, TelegramProxy: "http://p:3128"}, "http://p:3128"},
+		{"служебный вход выключен", Config{XrayMode: "local", XrayProbePort: 0}, ""},
+		{"dry_run — настоящего Xray нет", Config{XrayMode: "dry_run", XrayProbePort: 10811}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.cfg.TelegramProxyURL(); got != tt.want {
+				t.Errorf("TelegramProxyURL() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
