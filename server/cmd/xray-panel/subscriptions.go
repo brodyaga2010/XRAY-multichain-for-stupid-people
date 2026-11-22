@@ -39,7 +39,7 @@ func startSubscriptions(ctx context.Context, app subscriptionExpirer, rb running
 	done := make(chan struct{})
 	var notify alerter
 	if rb.bot != nil {
-		notify = rb.bot
+		notify = rb.bot.AdminAlerts() // в сообщении email пользователя — только администраторам
 	}
 	go func() {
 		defer close(done)

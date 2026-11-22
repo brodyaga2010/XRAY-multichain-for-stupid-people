@@ -160,33 +160,39 @@ func TestListsAreTrimmed(t *testing.T) {
 	}
 }
 
-func TestTelegramAdminChats(t *testing.T) {
+func TestTelegramChats(t *testing.T) {
 	tests := []struct {
+		env     string
 		raw     string
 		want    []int64
 		wantErr bool
 	}{
-		{"", nil, false},
-		{"111222333", []int64{111222333}, false},
-		{" 1, -100200300 ,", []int64{1, -100200300}, false},
-		{"me", nil, true},
+		{"TELEGRAM_ADMIN_CHAT_IDS", "", nil, false},
+		{"TELEGRAM_ADMIN_CHAT_IDS", "111222333", []int64{111222333}, false},
+		{"TELEGRAM_ADMIN_CHAT_IDS", " 1, -100200300 ,", []int64{1, -100200300}, false},
+		{"TELEGRAM_ADMIN_CHAT_IDS", "me", nil, true},
+		{"TELEGRAM_ALERT_CHAT_IDS", "-4000000001", []int64{-4000000001}, false},
+		{"TELEGRAM_ALERT_CHAT_IDS", "-4000000001,group", nil, true},
 	}
 	for _, tt := range tests {
-		t.Run(tt.raw, func(t *testing.T) {
+		t.Run(tt.env+"="+tt.raw, func(t *testing.T) {
 			_, err := Load(func(key string) (string, bool) {
 				switch key {
 				case "JWT_SECRET":
 					return "long-enough-secret-value", true
-				case "TELEGRAM_ADMIN_CHAT_IDS":
+				case tt.env:
 					return tt.raw, true
 				}
 				return "", false
 			})
-			if (err != nil) != tt.wantErr {
+			if (err != nil) != tt.wantErr || (err != nil && !strings.Contains(err.Error(), tt.env)) {
 				t.Fatalf("Load err = %v, wantErr %v", err, tt.wantErr)
 			}
-			cfg := Config{TelegramAdminChatIDs: tt.raw}
-			got, _ := cfg.TelegramAdminChats()
+			cfg := Config{TelegramAdminChatIDs: tt.raw, TelegramAlertChatIDs: tt.raw}
+			get := map[string]func() ([]int64, error){
+				"TELEGRAM_ADMIN_CHAT_IDS": cfg.TelegramAdminChats, "TELEGRAM_ALERT_CHAT_IDS": cfg.TelegramAlertChats,
+			}[tt.env]
+			got, _ := get()
 			if fmt.Sprint(got) != fmt.Sprint(tt.want) {
 				t.Errorf("chats = %v, want %v", got, tt.want)
 			}

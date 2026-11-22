@@ -2,11 +2,13 @@ package telegram
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"xraypanel/internal/monitor"
+	"xraypanel/internal/store"
 )
 
 type fakeStatus struct{ snap monitor.Snapshot }
@@ -97,5 +99,64 @@ func TestStatusButtonSendsSummary(t *testing.T) {
 		if len(calls) != 1 || !strings.Contains(calls[0].Params["text"].(string), "Состояние VPN") {
 			t.Errorf("%s: %v", text, calls)
 		}
+	}
+}
+
+func TestAlertChats(t *testing.T) {
+	const group = int64(-4000000001)
+	tests := []struct {
+		name  string
+		alert func(b *Bot)
+		want  []int64
+	}{
+		{"тревога о работе системы — админу и в группу", func(b *Bot) {
+			b.Alert(context.Background(), "🔴 Цепочка")
+		}, []int64{adminChat, group}},
+		{"с данными пользователя (подписка) — только админу", func(b *Bot) {
+			b.AdminAlerts().Alert(context.Background(), "⏰ Закончилась подписка: user@example.com")
+		}, []int64{adminChat}},
+		{"заявка — только админу", func(b *Bot) {
+			b.UserRegistered(context.Background(), store.User{ID: 1, Email: "new@example.com"}, "")
+		}, []int64{adminChat}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f, b := newTestBot(t, &fakeModerator{})
+			b.SetAlertChats([]int64{group, adminChat, group}) // админ и повтор не дублируются
+
+			tt.alert(b)
+
+			var got []int64
+			for _, c := range f.callsOf("sendMessage") {
+				got = append(got, int64(c.Params["chat_id"].(float64)))
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("отправлено в %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAlertChatIsReadOnly(t *testing.T) {
+	const group = int64(-4000000001)
+	tests := []struct {
+		name   string
+		update Update
+	}{
+		{"команда", Update{Message: &Message{Chat: Chat{ID: group}, Text: "/status@panel_bot"}}},
+		{"текст кнопки", Update{Message: &Message{Chat: Chat{ID: group}, Text: PendingButton}}},
+		{"/start", Update{Message: &Message{Chat: Chat{ID: group}, Text: "/start"}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f, b := newTestBot(t, &fakeModerator{pending: []store.User{{ID: 3, Email: "one@example.com"}}})
+			b.SetAlertChats([]int64{group})
+
+			b.Handle(context.Background(), tt.update)
+
+			if calls := f.callsOf("sendMessage"); len(calls) != 0 {
+				t.Errorf("бот ответил в группе тревог: %v", calls[0].Params)
+			}
+		})
 	}
 }

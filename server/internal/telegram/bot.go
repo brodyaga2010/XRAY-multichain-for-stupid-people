@@ -41,10 +41,13 @@ type Bot struct {
 	api    *Client
 	admins map[int64]bool
 	chats  []int64
-	mod    Moderator
-	status StatusSource
-	backup func(ctx context.Context) (int, error)
-	log    *slog.Logger
+	// alertChats — чаты только для тревог о работе системы: сообщения оттуда бот молча пропускает.
+	alertChats []int64
+	alertOnly  map[int64]bool
+	mod        Moderator
+	status     StatusSource
+	backup     func(ctx context.Context) (int, error)
+	log        *slog.Logger
 
 	// Location — часовой пояс времени в сообщениях (по умолчанию time.Local, задаётся TZ).
 	Location *time.Location
@@ -62,6 +65,20 @@ func New(api *Client, adminChats []int64, mod Moderator) *Bot {
 	return &Bot{
 		api: api, admins: admins, chats: adminChats, mod: mod, log: slog.Default(),
 		Location: time.Local, PollTimeout: 50, RetryDelay: 5 * time.Second,
+	}
+}
+
+// SetAlertChats задаёт чаты (например, группу), куда кроме администраторов идут тревоги о работе системы:
+// мониторинг VPN и сбой копии базы. Заявки, подписки и сами копии туда не попадают; команды и кнопки
+// из этих чатов не принимаются.
+func (b *Bot) SetAlertChats(chats []int64) {
+	b.alertChats, b.alertOnly = nil, map[int64]bool{}
+	for _, id := range chats {
+		if b.admins[id] || b.alertOnly[id] {
+			continue
+		}
+		b.alertChats = append(b.alertChats, id)
+		b.alertOnly[id] = true
 	}
 }
 
@@ -87,7 +104,7 @@ func (b *Bot) Run(ctx context.Context) {
 	if err != nil {
 		b.log.Warn("telegram: getMe не ответил, продолжаю", "error", err)
 	} else {
-		b.log.Info("telegram-бот запущен", "bot", "@"+me.Username, "admin_chats", len(b.chats))
+		b.log.Info("telegram-бот запущен", "bot", "@"+me.Username, "admin_chats", len(b.chats), "alert_chats", len(b.alertChats))
 	}
 	if len(b.chats) == 0 {
 		b.log.Warn("telegram: не задан TELEGRAM_ADMIN_CHAT_IDS — заявки отправлять некуда; напишите боту /start, он покажет chat id")
@@ -130,6 +147,9 @@ func (b *Bot) Handle(ctx context.Context, update Update) {
 
 func (b *Bot) handleMessage(ctx context.Context, msg *Message) {
 	chat := msg.Chat.ID
+	if b.alertOnly[chat] {
+		return // группа для тревог: бот там только пишет и ни на что не отвечает
+	}
 	if !b.admins[chat] {
 		b.log.Info("telegram: сообщение из чата без доступа", "chat_id", chat)
 		b.send(ctx, chat, fmt.Sprintf("Это служебный бот. Ваш chat id: <code>%d</code>", chat), nil)

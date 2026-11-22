@@ -17,9 +17,22 @@ type StatusSource interface {
 // SetStatusSource подключает кнопку «Состояние»; nil — мониторинг выключен.
 func (b *Bot) SetStatusSource(s StatusSource) { b.status = s }
 
-// Alert отправляет тревогу мониторинга всем администраторам (реализует monitor.Notifier).
+// Alert отправляет тревогу о работе системы (мониторинг VPN, сбой копии базы) администраторам
+// и в чаты из SetAlertChats (реализует monitor.Notifier).
 func (b *Bot) Alert(ctx context.Context, text string) {
-	for _, chat := range b.chats {
+	b.alert(ctx, append(append([]int64(nil), b.chats...), b.alertChats...), text)
+}
+
+// AdminAlerts — получатель сообщений только для администраторов: в них данные пользователей
+// (например, email в «закончилась подписка»), им не место в общей группе.
+func (b *Bot) AdminAlerts() interface{ Alert(context.Context, string) } { return adminAlerts{b} }
+
+type adminAlerts struct{ b *Bot }
+
+func (a adminAlerts) Alert(ctx context.Context, text string) { a.b.alert(ctx, a.b.chats, text) }
+
+func (b *Bot) alert(ctx context.Context, chats []int64, text string) {
+	for _, chat := range chats {
 		if err := b.api.SendMessage(ctx, chat, html.EscapeString(text), nil); err != nil {
 			b.log.Warn("telegram: тревога не отправлена", "chat_id", chat, "error", err)
 		}

@@ -56,6 +56,9 @@ type Config struct {
 	// Telegram-бот для уведомлений администратору; пустой токен — бот выключен.
 	TelegramBotToken     string
 	TelegramAdminChatIDs string
+	// TelegramAlertChatIDs — чаты (например, группа), куда идут только тревоги о работе системы;
+	// команды и кнопки оттуда бот не принимает.
+	TelegramAlertChatIDs string
 	TelegramAPIURL       string
 
 	// Мониторинг цепочки и сервера; MonitorIntervalSeconds = 0 — выключен.
@@ -196,6 +199,7 @@ func Load(lookup Lookup) (*Config, error) {
 	str(&cfg.ListenAddr, "LISTEN_ADDR")
 	str(&cfg.TelegramBotToken, "TELEGRAM_BOT_TOKEN")
 	str(&cfg.TelegramAdminChatIDs, "TELEGRAM_ADMIN_CHAT_IDS")
+	str(&cfg.TelegramAlertChatIDs, "TELEGRAM_ALERT_CHAT_IDS")
 	str(&cfg.TelegramAPIURL, "TELEGRAM_API_URL")
 	num(&cfg.MonitorIntervalSeconds, "MONITOR_INTERVAL_SECONDS")
 	num(&cfg.MonitorFailThreshold, "MONITOR_FAIL_THRESHOLD")
@@ -219,6 +223,9 @@ func Load(lookup Lookup) (*Config, error) {
 		errs = append(errs, fmt.Sprintf("XRAY_MODE: допустимо local, ssh или dry_run, получено %q", cfg.XrayMode))
 	}
 	if _, err := cfg.TelegramAdminChats(); err != nil {
+		errs = append(errs, err.Error())
+	}
+	if _, err := cfg.TelegramAlertChats(); err != nil {
 		errs = append(errs, err.Error())
 	}
 	if cfg.BackupHour < -1 || cfg.BackupHour > 23 {
@@ -318,11 +325,20 @@ func (c *Config) TrustedProxyList() map[string]struct{} {
 
 // TelegramAdminChats — чаты Telegram, которым бот шлёт заявки и чьи нажатия принимает.
 func (c *Config) TelegramAdminChats() ([]int64, error) {
+	return parseChatIDs(c.TelegramAdminChatIDs, "TELEGRAM_ADMIN_CHAT_IDS")
+}
+
+// TelegramAlertChats — чаты только для тревог о работе системы (TELEGRAM_ALERT_CHAT_IDS).
+func (c *Config) TelegramAlertChats() ([]int64, error) {
+	return parseChatIDs(c.TelegramAlertChatIDs, "TELEGRAM_ALERT_CHAT_IDS")
+}
+
+func parseChatIDs(raw, name string) ([]int64, error) {
 	var chats []int64
-	for _, item := range splitList(c.TelegramAdminChatIDs) {
+	for _, item := range splitList(raw) {
 		id, err := strconv.ParseInt(item, 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf("TELEGRAM_ADMIN_CHAT_IDS: ожидаются числа через запятую, получено %q", item)
+			return nil, fmt.Errorf("%s: ожидаются числа через запятую, получено %q", name, item)
 		}
 		chats = append(chats, id)
 	}
