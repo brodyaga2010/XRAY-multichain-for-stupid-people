@@ -179,7 +179,7 @@ func (m *Manager) Normalize() (bool, error) {
 	return true, m.restart()
 }
 
-// Bootstrap включает API/статистику и XHTTP inbound. Перезапускает Xray, если конфиг изменился.
+// Bootstrap включает API/статистику, XHTTP inbound, служебный вход и проверку соединения до выхода. Перезапускает Xray, если конфиг изменился.
 func (m *Manager) Bootstrap() (bool, error) {
 	unlock, err := m.lock()
 	if err != nil {
@@ -195,6 +195,9 @@ func (m *Manager) Bootstrap() (bool, error) {
 		return false, badGateway("%s", err)
 	}
 	if EnsureProbeInbound(cfg, m.cfg.XrayProbePort) {
+		changed = true
+	}
+	if EnsureExitHealthCheck(cfg) {
 		changed = true
 	}
 	if changed {

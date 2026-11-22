@@ -426,6 +426,38 @@ func EnsureProbeInbound(cfg Config, port int) bool {
 	return !reflect.DeepEqual(before, cfg)
 }
 
+// Проверка gRPC-соединения до выходного сервера: если ответов нет exitIdleTimeout секунд, Xray шлёт ping
+// и рвёт соединение, когда за exitHealthTimeout секунд ответа нет. Все пользователи идут через одно такое
+// соединение, и без проверки «замёрзшее» соединение висит, пока Xray не перезапустят.
+const (
+	exitIdleTimeout   = 15
+	exitHealthTimeout = 10
+)
+
+// EnsureExitHealthCheck включает проверку соединения в outbound to-exit, если он работает через gRPC.
+// Заданные вручную значения не трогает. Возвращает true, если конфиг изменился.
+func EnsureExitHealthCheck(cfg Config) bool {
+	changed := false
+	for _, item := range asList(cfg["outbounds"]) {
+		outbound := asObj(item)
+		if outbound == nil || asStr(outbound["tag"]) != ExitOutboundTag {
+			continue
+		}
+		stream := asObj(outbound["streamSettings"])
+		if stream == nil || asStr(stream["network"]) != "grpc" {
+			continue
+		}
+		grpc := setDefaultObj(stream, "grpcSettings")
+		for key, value := range map[string]int{"idle_timeout": exitIdleTimeout, "health_check_timeout": exitHealthTimeout} {
+			if _, ok := grpc[key]; !ok {
+				grpc[key] = value
+				changed = true
+			}
+		}
+	}
+	return changed
+}
+
 // ExitServer — адрес выходного сервера из outbound to-exit; ok=false, если цепочки нет.
 func ExitServer(cfg Config) (host string, port int, ok bool) {
 	for _, item := range asList(cfg["outbounds"]) {
