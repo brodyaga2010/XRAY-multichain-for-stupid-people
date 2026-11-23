@@ -9,6 +9,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAutoRefresh } from "@/hooks";
+import { dashboardUsers } from "@/lib/dashboardUsers";
 import { AppView } from "@/types";
 import { formatBytes, formatDate, keyTitle } from "@/utils";
 
@@ -62,12 +63,7 @@ export function AdminDashboard({
     return { activeKeys, pendingUsers, suspendedUsers, onlineKeys, totalTraffic };
   }, [users, keys]);
 
-  // Сначала заявки (их можно подтвердить прямо здесь), остальное место — новые пользователи.
-  const byNewest = [...users].sort((left, right) => right.created_at.localeCompare(left.created_at));
-  const shownUsers = [
-    ...byNewest.filter((user) => user.status === "pending"),
-    ...byNewest.filter((user) => user.status !== "pending")
-  ].slice(0, 5);
+  const shownUsers = dashboardUsers(users);
   // Подробности состояния — на отдельной вкладке; здесь только итог одной ячейкой.
   const vpn: Stat = (() => {
     const base = { label: "Состояние VPN", icon: Activity, onClick: () => onNavigate("status") };
