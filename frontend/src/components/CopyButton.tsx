@@ -6,9 +6,14 @@ import { copyText } from "@/utils";
 export function CopyButton({
   text,
   label = "Копировать",
+  iconOnly = false,
   ...props
-}: { text: string; label?: string } & Omit<ComponentProps<typeof Button>, "onClick" | "children">) {
+}: { text: string; label?: string; iconOnly?: boolean } & Omit<
+  ComponentProps<typeof Button>,
+  "onClick" | "children"
+>) {
   const [done, setDone] = useState(false);
+  const caption = done ? "Скопировано" : label;
 
   async function copy() {
     try {
@@ -21,9 +26,15 @@ export function CopyButton({
   }
 
   return (
-    <Button type="button" onClick={copy} disabled={!text} {...props}>
+    <Button
+      type="button"
+      onClick={copy}
+      disabled={!text}
+      {...(iconOnly && { "aria-label": caption, title: caption })}
+      {...props}
+    >
       {done ? <Check /> : <Copy />}
-      {done ? "Скопировано" : label}
+      {!iconOnly && caption}
     </Button>
   );
 }
