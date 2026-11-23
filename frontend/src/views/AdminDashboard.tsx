@@ -9,7 +9,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAutoRefresh } from "@/hooks";
-import { dashboardUsers } from "@/lib/dashboardUsers";
+import { activeUserCount, dashboardUsers } from "@/lib/dashboardUsers";
 import { AppView } from "@/types";
 import { formatBytes, formatDate, keyTitle } from "@/utils";
 
@@ -84,7 +84,13 @@ export function AdminDashboard({
           { label: "Сейчас в сети", value: stats.onlineKeys, icon: Wifi, tone: "good", onClick: () => onNavigate("keys") },
           { label: "Трафик всего", value: formatBytes(stats.totalTraffic), icon: ArrowUpDown },
           { label: "Заявки", value: stats.pendingUsers, icon: Clock3, tone: "warn", onClick: () => onNavigate("admin") },
-          { label: "Пользователей", value: users.length, icon: Users, onClick: () => onNavigate("admin") }
+          {
+            label: "Пользователи",
+            value: activeUserCount(users),
+            icon: Users,
+            hint: "Подтверждённые — без заявок и заблокированных",
+            onClick: () => onNavigate("admin")
+          }
         ]}
       />
 

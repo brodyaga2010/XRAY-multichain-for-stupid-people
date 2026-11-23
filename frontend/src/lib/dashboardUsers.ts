@@ -11,3 +11,8 @@ export function dashboardUsers(users: User[], limit = 5) {
     ...byNewest.filter((user) => user.status === "approved")
   ].slice(0, limit);
 }
+
+/** Активные пользователи — подтверждённые; заявки и заблокированные не считаются. */
+export function activeUserCount(users: User[]) {
+  return users.filter((user) => user.status === "approved").length;
+}

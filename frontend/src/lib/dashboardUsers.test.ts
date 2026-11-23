@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { User, UserStatus } from "@/api";
-import { dashboardUsers } from "./dashboardUsers";
+import { activeUserCount, dashboardUsers } from "./dashboardUsers";
 
 const user = (id: number, status: UserStatus, day: number): User => ({
   id,
@@ -50,5 +50,19 @@ describe("dashboardUsers", () => {
     const users = [user(1, "approved", 1), user(2, "approved", 2)];
     dashboardUsers(users);
     expect(users.map((item) => item.id)).toEqual([1, 2]);
+  });
+});
+
+describe("activeUserCount", () => {
+  it.each([
+    {
+      name: "только подтверждённые",
+      users: [user(1, "approved", 1), user(2, "pending", 2), user(3, "suspended", 3), user(4, "approved", 4)],
+      want: 2
+    },
+    { name: "одни заявки и заблокированные", users: [user(1, "pending", 1), user(2, "suspended", 2)], want: 0 },
+    { name: "нет пользователей", users: [], want: 0 }
+  ])("$name", ({ users, want }) => {
+    expect(activeUserCount(users)).toBe(want);
   });
 });
