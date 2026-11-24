@@ -566,6 +566,7 @@ export function AdminUsers({
                 onRevoke={(id) => mutate(() => api.adminRevokeKey(id), "Не удалось отозвать ключ")}
                 autoOpenKeyId={newKeyId}
                 cardsOnly
+                loadTraffic={api.adminKeyTraffic}
               />
               </div>
             </div>

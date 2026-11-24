@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -45,19 +46,48 @@ func fillDays(rows []store.TrafficDay, today time.Time, days int) []trafficDayOu
 	return out
 }
 
-// trafficSeries — трафик по дням за последние days дней (по часовому поясу сервера); ownerID 0 — все ключи.
-func (a *App) trafficSeries(ctx context.Context, ownerID int64, days int) ([]trafficDayOut, error) {
+// queryID читает необязательный параметр-идентификатор (0 — не задан).
+func queryID(r *http.Request, name, msg string) (int64, error) {
+	raw := r.URL.Query().Get(name)
+	if raw == "" {
+		return 0, nil
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id < 1 {
+		return 0, invalid(msg)
+	}
+	return id, nil
+}
+
+// trafficKey читает key_id и проверяет, что ключ есть и (при ownerID > 0) принадлежит этому пользователю.
+func (a *App) trafficKey(r *http.Request, ownerID int64) (int64, error) {
+	id, err := queryID(r, "key_id", "Параметр key_id должен быть id ключа")
+	if err != nil || id == 0 {
+		return 0, err
+	}
+	key, err := a.st.KeyByID(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) || (err == nil && ownerID > 0 && key.OwnerID != ownerID) {
+		return 0, httpErr(http.StatusNotFound, "Ключ не найден")
+	}
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+// trafficSeries — трафик по дням за последние days дней (по часовому поясу сервера); нулевые поля фильтра
+// (кроме дат) — без ограничения.
+func (a *App) trafficSeries(ctx context.Context, f store.TrafficFilter, days int) ([]trafficDayOut, error) {
 	today := time.Now().In(time.Local)
-	rows, err := a.st.TrafficByDay(ctx, store.TrafficFilter{
-		From: today.AddDate(0, 0, -(days - 1)).Format(dayLayout), To: today.Format(dayLayout), OwnerID: ownerID,
-	})
+	f.From, f.To = today.AddDate(0, 0, -(days-1)).Format(dayLayout), today.Format(dayLayout)
+	rows, err := a.st.TrafficByDay(ctx, f)
 	if err != nil {
 		return nil, err
 	}
 	return fillDays(rows, today, days), nil
 }
 
-// adminTraffic — трафик всех ключей или одного пользователя (user_id) по дням.
+// adminTraffic — трафик всех ключей, одного пользователя (user_id) или одного ключа (key_id) по дням.
 func (a *App) adminTraffic(w http.ResponseWriter, r *http.Request) error {
 	if _, err := a.adminUser(r); err != nil {
 		return err
@@ -66,17 +96,20 @@ func (a *App) adminTraffic(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	var ownerID int64
-	if raw := r.URL.Query().Get("user_id"); raw != "" {
-		ownerID, err = strconv.ParseInt(raw, 10, 64)
-		if err != nil || ownerID < 1 {
-			return invalid("Параметр user_id должен быть id пользователя")
-		}
+	ownerID, err := queryID(r, "user_id", "Параметр user_id должен быть id пользователя")
+	if err != nil {
+		return err
+	}
+	if ownerID > 0 {
 		if _, err := a.getUser(r, ownerID); err != nil {
 			return err
 		}
 	}
-	out, err := a.trafficSeries(r.Context(), ownerID, days)
+	keyID, err := a.trafficKey(r, ownerID)
+	if err != nil {
+		return err
+	}
+	out, err := a.trafficSeries(r.Context(), store.TrafficFilter{OwnerID: ownerID, KeyID: keyID}, days)
 	if err != nil {
 		return err
 	}
@@ -84,7 +117,7 @@ func (a *App) adminTraffic(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// ownTraffic — трафик ключей текущего пользователя по дням.
+// ownTraffic — трафик ключей текущего пользователя (или одного своего ключа, key_id) по дням.
 func (a *App) ownTraffic(w http.ResponseWriter, r *http.Request) error {
 	user, err := a.approvedUser(r)
 	if err != nil {
@@ -94,7 +127,11 @@ func (a *App) ownTraffic(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	out, err := a.trafficSeries(r.Context(), user.ID, days)
+	keyID, err := a.trafficKey(r, user.ID)
+	if err != nil {
+		return err
+	}
+	out, err := a.trafficSeries(r.Context(), store.TrafficFilter{OwnerID: user.ID, KeyID: keyID}, days)
 	if err != nil {
 		return err
 	}

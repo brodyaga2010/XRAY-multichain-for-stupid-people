@@ -1,6 +1,6 @@
-import { Link2, Trash2 } from "lucide-react";
-import { ReactNode, useEffect, useMemo, useState } from "react";
-import { KeyStatus, VpnKey } from "@/api";
+import { ChartColumn, Link2, Trash2 } from "lucide-react";
+import { Fragment, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { KeyStatus, TrafficDay, VpnKey } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -13,6 +13,7 @@ import { OnlineIndicator, Traffic } from "./KeyActivity";
 import { SortableHead } from "./SortableHead";
 import { KeyModal } from "./KeyModal";
 import { StatusBadge } from "./StatusBadge";
+import { TrafficChart } from "./TrafficChart";
 
 type KeyFilter = "all" | KeyStatus;
 
@@ -39,6 +40,44 @@ const keyColumns: Record<KeySort, SortColumn<VpnKey>> = {
   created: { value: (key) => timeOf(key.created_at), firstDir: "desc" }
 };
 
+/** Загрузка истории трафика одного ключа за days дней. */
+type KeyTrafficLoader = (keyId: number, days: number) => Promise<TrafficDay[]>;
+
+/** Трафик ключа как кнопка: раскрывает график по дням. Без onToggle — просто цифры. */
+function TrafficToggle({
+  keyItem,
+  open,
+  onToggle,
+  className
+}: {
+  keyItem: VpnKey;
+  open: boolean;
+  onToggle?: () => void;
+  className?: string;
+}) {
+  if (!onToggle) return <Traffic keyItem={keyItem} className={className} />;
+  return (
+    <button
+      type="button"
+      className={cn(
+        "-mx-1.5 -my-1 inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        open && "bg-muted"
+      )}
+      aria-expanded={open}
+      title={open ? "Скрыть трафик по дням" : "Трафик по дням"}
+      onClick={onToggle}
+    >
+      <Traffic keyItem={keyItem} className={className} />
+      <ChartColumn className={cn("size-3.5 shrink-0", open ? "text-foreground" : "text-muted-foreground")} />
+    </button>
+  );
+}
+
+function KeyTrafficChart({ keyId, load }: { keyId: number; load: KeyTrafficLoader }) {
+  const loadKey = useCallback((days: number) => load(keyId, days), [load, keyId]);
+  return <TrafficChart load={loadKey} />;
+}
+
 const connectClass = "bg-accent text-accent-foreground hover:bg-accent/70";
 const deleteClass = "text-muted-foreground hover:bg-destructive/10 hover:text-destructive";
 
@@ -55,7 +94,8 @@ export function KeyTable({
   empty,
   collapseRevoked = false,
   autoOpenKeyId = null,
-  cardsOnly = false
+  cardsOnly = false,
+  loadTraffic
 }: {
   keys: VpnKey[];
   showOwner?: boolean;
@@ -79,11 +119,14 @@ export function KeyTable({
   autoOpenKeyId?: number | null;
   /** Всегда карточки (сеткой на широком экране), без таблицы — для личного списка устройств. */
   cardsOnly?: boolean;
+  /** История трафика ключа: если задана, трафик в строке раскрывает график по дням. */
+  loadTraffic?: KeyTrafficLoader;
 }) {
   const [filter, setFilter] = useState<KeyFilter>("all");
   const confirm = useConfirm();
   const [showRevoked, setShowRevoked] = useState(false);
   const [openKeyId, setOpenKeyId] = useState<number | null>(null);
+  const [trafficKeyId, setTrafficKeyId] = useState<number | null>(null);
 
   useEffect(() => {
     if (autoOpenKeyId !== null) setOpenKeyId(autoOpenKeyId);
@@ -115,6 +158,9 @@ export function KeyTable({
     });
     if (ok) void onRevoke(key.id);
   }
+
+  const trafficToggle = (key: VpnKey) =>
+    loadTraffic ? () => setTrafficKeyId((current) => (current === key.id ? null : key.id)) : undefined;
 
   const status = (key: VpnKey) =>
     key.status === "active" ? <OnlineIndicator keyItem={key} /> : <StatusBadge status={key.status} />;
@@ -184,50 +230,59 @@ export function KeyTable({
                   </TableHeader>
                   <TableBody>
                     {rendered.map((key) => (
-                      <TableRow key={key.id} className={cn(key.status === "revoked" && "opacity-60")}>
-                        <TableCell className="max-w-64 pl-4">
-                          <div className="grid">
-                            <span className="truncate font-medium" title={keyTitle(key)}>
-                              {keyTitle(key)}
-                            </span>
-                            <span className="font-mono text-xs text-muted-foreground">{shortUuid(key.uuid)}</span>
-                          </div>
-                        </TableCell>
-                        {showOwner && (
-                          <TableCell className="max-w-56">
-                            <span className="block truncate" title={key.owner_email ?? undefined}>
-                              {key.owner_email ?? "—"}
-                            </span>
-                          </TableCell>
-                        )}
-                        <TableCell>{status(key)}</TableCell>
-                        <TableCell>
-                          <Traffic keyItem={key} />
-                        </TableCell>
-                        <TableCell className="text-muted-foreground tabular-nums">{formatDate(key.created_at)}</TableCell>
-                        <TableCell className="pr-3">
-                          {key.status !== "revoked" && (
-                            <div className="flex justify-end gap-1">
-                              {key.status === "active" && (
-                                <Button size="sm" className={connectClass} onClick={() => setOpenKeyId(key.id)}>
-                                  <Link2 />
-                                  Подключить
-                                </Button>
-                              )}
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                className={deleteClass}
-                                title="Отозвать ключ"
-                                aria-label="Отозвать ключ"
-                                onClick={() => confirmRevoke(key)}
-                              >
-                                <Trash2 />
-                              </Button>
+                      <Fragment key={key.id}>
+                        <TableRow className={cn(key.status === "revoked" && "opacity-60")}>
+                          <TableCell className="max-w-64 pl-4">
+                            <div className="grid">
+                              <span className="truncate font-medium" title={keyTitle(key)}>
+                                {keyTitle(key)}
+                              </span>
+                              <span className="font-mono text-xs text-muted-foreground">{shortUuid(key.uuid)}</span>
                             </div>
+                          </TableCell>
+                          {showOwner && (
+                            <TableCell className="max-w-56">
+                              <span className="block truncate" title={key.owner_email ?? undefined}>
+                                {key.owner_email ?? "—"}
+                              </span>
+                            </TableCell>
                           )}
-                        </TableCell>
-                      </TableRow>
+                          <TableCell>{status(key)}</TableCell>
+                          <TableCell>
+                            <TrafficToggle keyItem={key} open={trafficKeyId === key.id} onToggle={trafficToggle(key)} />
+                          </TableCell>
+                          <TableCell className="text-muted-foreground tabular-nums">{formatDate(key.created_at)}</TableCell>
+                          <TableCell className="pr-3">
+                            {key.status !== "revoked" && (
+                              <div className="flex justify-end gap-1">
+                                {key.status === "active" && (
+                                  <Button size="sm" className={connectClass} onClick={() => setOpenKeyId(key.id)}>
+                                    <Link2 />
+                                    Подключить
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className={deleteClass}
+                                  title="Отозвать ключ"
+                                  aria-label="Отозвать ключ"
+                                  onClick={() => confirmRevoke(key)}
+                                >
+                                  <Trash2 />
+                                </Button>
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                        {loadTraffic && trafficKeyId === key.id && (
+                          <TableRow className="hover:bg-transparent">
+                            <TableCell colSpan={showOwner ? 6 : 5} className="px-4 pt-1 pb-4 whitespace-normal">
+                              <KeyTrafficChart keyId={key.id} load={loadTraffic} />
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </Fragment>
                     ))}
                   </TableBody>
                 </Table>
@@ -256,7 +311,12 @@ export function KeyTable({
                     <span className="shrink-0 pt-0.5">{status(key)}</span>
                   </div>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                    <Traffic keyItem={key} className="text-foreground" />
+                    <TrafficToggle
+                      keyItem={key}
+                      className="text-foreground"
+                      open={trafficKeyId === key.id}
+                      onToggle={trafficToggle(key)}
+                    />
                     <span>с {formatDate(key.created_at)}</span>
                   </div>
                   {key.status !== "revoked" && (
@@ -283,6 +343,7 @@ export function KeyTable({
                       </Button>
                     </div>
                   )}
+                  {loadTraffic && trafficKeyId === key.id && <KeyTrafficChart keyId={key.id} load={loadTraffic} />}
                 </article>
               ))}
             </div>

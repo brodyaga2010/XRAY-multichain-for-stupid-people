@@ -92,28 +92,31 @@ export function TrafficChart({
           <span>{formatDay(bars[bars.length - 1].day)}</span>
         </div>
       )}
-      {/* Для скринридеров — те же данные таблицей. */}
-      <table className="sr-only">
-        <caption>{title}</caption>
-        <thead>
-          <tr>
-            <th>День</th>
-            <th>Скачано</th>
-            <th>Отдано</th>
-          </tr>
-        </thead>
-        <tbody>
-          {bars
-            .filter((bar) => bar.total > 0)
-            .map((bar) => (
-              <tr key={bar.day}>
-                <td>{formatDay(bar.day)}</td>
-                <td>{formatBytes(bar.down)}</td>
-                <td>{formatBytes(bar.up)}</td>
-              </tr>
-            ))}
-        </tbody>
-      </table>
+      {/* Для скринридеров — те же данные таблицей. sr-only — на обёртке: таблица сама по высоте
+          не сжимается и растягивала бы прокрутку, когда график стоит внутри таблицы ключей. */}
+      <div className="sr-only">
+        <table>
+          <caption>{title}</caption>
+          <thead>
+            <tr>
+              <th>День</th>
+              <th>Скачано</th>
+              <th>Отдано</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bars
+              .filter((bar) => bar.total > 0)
+              .map((bar) => (
+                <tr key={bar.day}>
+                  <td>{formatDay(bar.day)}</td>
+                  <td>{formatBytes(bar.down)}</td>
+                  <td>{formatBytes(bar.up)}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

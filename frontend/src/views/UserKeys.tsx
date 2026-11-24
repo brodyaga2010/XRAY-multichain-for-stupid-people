@@ -94,6 +94,7 @@ export function UserKeys({
         keys={filteredKeys}
         showOwner
         onRevoke={revoke}
+        loadTraffic={api.adminKeyTraffic}
         showHeader={false}
         headerExtra={
           <Button variant="outline" disabled={busy} onClick={importKeys} title="Импортировать ключи с сервера">
@@ -128,6 +129,7 @@ export function UserKeys({
       <KeyTable
         keys={filteredKeys}
         cardsOnly
+        loadTraffic={api.ownKeyTraffic}
         title="Мои устройства"
         titleExtra={
           keys.length > 0 && (

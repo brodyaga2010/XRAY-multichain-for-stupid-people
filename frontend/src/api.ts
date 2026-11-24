@@ -206,6 +206,9 @@ export const api = {
   adminTraffic: (days: number, userId?: number) =>
     request<TrafficDay[]>(`/admin/traffic?days=${days}${userId ? `&user_id=${userId}` : ""}`),
   ownTraffic: (days: number) => request<TrafficDay[]>(`/keys/traffic?days=${days}`),
+  adminKeyTraffic: (keyId: number, days: number) =>
+    request<TrafficDay[]>(`/admin/traffic?days=${days}&key_id=${keyId}`),
+  ownKeyTraffic: (keyId: number, days: number) => request<TrafficDay[]>(`/keys/traffic?days=${days}&key_id=${keyId}`),
   subscription: () => request<{ url: string }>("/keys/subscription"),
   rotateSubscription: () => request<{ url: string }>("/keys/subscription/rotate", { method: "POST" }),
   verifyEmail: (token: string) =>
