@@ -1,9 +1,11 @@
-import { ChartColumn, Link2, Trash2 } from "lucide-react";
+import { ChartColumn, LayoutGrid, Link2, Table2, Trash2 } from "lucide-react";
 import { Fragment, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { KeyStatus, TrafficDay, VpnKey } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { KeyView, loadKeyView, saveKeyView } from "@/lib/keyView";
 import { SortColumn, timeOf, useSort } from "@/lib/sort";
 import { cn } from "@/lib/utils";
 import { formatDate, keyTitle, shortUuid } from "@/utils";
@@ -78,6 +80,25 @@ function KeyTrafficChart({ keyId, load }: { keyId: number; load: KeyTrafficLoade
   return <TrafficChart load={loadKey} />;
 }
 
+/** Переключатель вида: карточки или таблица. На узком месте таблицы нет — и переключателя тоже. */
+function ViewToggle({ value, onChange }: { value: KeyView; onChange: (view: KeyView) => void }) {
+  const options = [
+    { id: "cards" as const, label: "Карточки", icon: LayoutGrid },
+    { id: "table" as const, label: "Таблица", icon: Table2 }
+  ];
+  return (
+    <Tabs value={value} onValueChange={(next) => onChange(next as KeyView)} className="hidden shrink-0 @xl:flex">
+      <TabsList aria-label="Вид списка">
+        {options.map(({ id, label, icon: Icon }) => (
+          <TabsTrigger key={id} value={id} className="px-2" title={label} aria-label={label}>
+            <Icon />
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
+  );
+}
+
 const connectClass = "bg-accent text-accent-foreground hover:bg-accent/70";
 const deleteClass = "text-muted-foreground hover:bg-destructive/10 hover:text-destructive";
 
@@ -94,7 +115,8 @@ export function KeyTable({
   empty,
   collapseRevoked = false,
   autoOpenKeyId = null,
-  cardsOnly = false,
+  defaultView = "cards",
+  viewStorageKey,
   loadTraffic
 }: {
   keys: VpnKey[];
@@ -117,8 +139,10 @@ export function KeyTable({
   collapseRevoked?: boolean;
   /** Открыть окно этого ключа (например, только что созданного). */
   autoOpenKeyId?: number | null;
-  /** Всегда карточки (сеткой на широком экране), без таблицы — для личного списка устройств. */
-  cardsOnly?: boolean;
+  /** Вид по умолчанию; на узком месте (телефон) всегда карточки. */
+  defaultView?: KeyView;
+  /** Где запомнить выбранный вид (у каждого списка свой); без него переключателя нет. */
+  viewStorageKey?: string;
   /** История трафика ключа: если задана, трафик в строке раскрывает график по дням. */
   loadTraffic?: KeyTrafficLoader;
 }) {
@@ -127,6 +151,9 @@ export function KeyTable({
   const [showRevoked, setShowRevoked] = useState(false);
   const [openKeyId, setOpenKeyId] = useState<number | null>(null);
   const [trafficKeyId, setTrafficKeyId] = useState<number | null>(null);
+  const [view, setView] = useState<KeyView>(() =>
+    viewStorageKey ? loadKeyView(viewStorageKey, defaultView) : defaultView
+  );
 
   useEffect(() => {
     if (autoOpenKeyId !== null) setOpenKeyId(autoOpenKeyId);
@@ -148,6 +175,17 @@ export function KeyTable({
     }))
     .filter((item) => item.id !== "expired" || item.count > 0 || filter === "expired");
   const toolbarExtra = !showHeader && headerExtra;
+  const isTable = view === "table";
+
+  function changeView(next: KeyView) {
+    setView(next);
+    if (viewStorageKey) saveKeyView(viewStorageKey, next);
+  }
+
+  const viewToggle = viewStorageKey && keys.length > 0 && <ViewToggle value={view} onChange={changeView} />;
+  // С шапкой переключатель стоит в ней, рядом с кнопками; без шапки — в строке поиска.
+  const headerToggle = showHeader && viewToggle;
+  const toolbarToggle = !showHeader && viewToggle;
 
   async function confirmRevoke(key: VpnKey) {
     const ok = await confirm({
@@ -166,21 +204,26 @@ export function KeyTable({
     key.status === "active" ? <OnlineIndicator keyItem={key} /> : <StatusBadge status={key.status} />;
 
   return (
-    <Card className="gap-4">
+    <Card className="@container gap-4">
       {showHeader && (
-        <CardHeader>
-          <CardTitle className="flex items-baseline gap-2">
+        <CardHeader className="items-center">
+          <CardTitle className="flex min-w-0 items-baseline gap-2">
             {title}
             {titleExtra}
           </CardTitle>
-          {headerExtra && <CardAction>{headerExtra}</CardAction>}
+          {(headerExtra || headerToggle) && (
+            <CardAction className="flex items-center gap-2">
+              {headerToggle}
+              {headerExtra}
+            </CardAction>
+          )}
         </CardHeader>
       )}
-      <CardContent className="@container grid gap-4">
+      <CardContent className="grid gap-4">
         {beforeList}
-        {(showChips || search || toolbarExtra) && (
+        {(showChips || search || toolbarExtra || toolbarToggle) && (
           <div className="flex min-w-0 flex-col-reverse gap-3 md:flex-row md:items-center md:justify-between">
-            {showChips ? (
+            {showChips && (
               <FilterChips
                 label="Фильтр по статусу"
                 options={filterOptions}
@@ -188,12 +231,12 @@ export function KeyTable({
                 onChange={setFilter}
                 className="md:shrink-0"
               />
-            ) : (
-              <span />
             )}
-            {(search || toolbarExtra) && (
-              <div className="flex min-w-0 gap-2">
-                {search && <div className="min-w-0 flex-1 md:w-72 md:flex-initial">{search}</div>}
+            {(search || toolbarExtra || toolbarToggle) && (
+              // Без фильтров поиск занимает всю строку, а не жмётся вправо.
+              <div className={cn("flex min-w-0 gap-2", showChips ? "md:justify-end" : "flex-1")}>
+                {search && <div className={cn("min-w-0 flex-1", showChips && "md:w-72 md:flex-initial")}>{search}</div>}
+                {toolbarToggle}
                 {toolbarExtra}
               </div>
             )}
@@ -203,8 +246,8 @@ export function KeyTable({
           empty ?? <p className="py-10 text-center text-sm text-muted-foreground">Ключей нет</p>
         ) : (
           <>
-            {!cardsOnly && (
-              <div className="hidden overflow-hidden rounded-lg border @4xl:block">
+            {isTable && (
+              <div className="hidden overflow-hidden rounded-lg border @xl:block">
                 <Table>
                   <TableHeader className="bg-muted/50">
                     <TableRow>
@@ -212,7 +255,7 @@ export function KeyTable({
                         Ключ
                       </SortableHead>
                       {showOwner && (
-                        <SortableHead column="owner" sort={sort} onSort={toggle}>
+                        <SortableHead column="owner" sort={sort} onSort={toggle} className="hidden @4xl:table-cell">
                           Владелец
                         </SortableHead>
                       )}
@@ -222,7 +265,7 @@ export function KeyTable({
                       <SortableHead column="traffic" sort={sort} onSort={toggle}>
                         Трафик
                       </SortableHead>
-                      <SortableHead column="created" sort={sort} onSort={toggle}>
+                      <SortableHead column="created" sort={sort} onSort={toggle} className="hidden @2xl:table-cell">
                         Создан
                       </SortableHead>
                       <TableHead className="w-0" />
@@ -237,11 +280,24 @@ export function KeyTable({
                               <span className="truncate font-medium" title={keyTitle(key)}>
                                 {keyTitle(key)}
                               </span>
-                              <span className="font-mono text-xs text-muted-foreground">{shortUuid(key.uuid)}</span>
+                              {/* Пока колонки «Владелец» не видно, владелец — вместо UUID. */}
+                              {showOwner && key.owner_email && (
+                                <span className="truncate text-xs text-muted-foreground @4xl:hidden" title={key.owner_email}>
+                                  {key.owner_email}
+                                </span>
+                              )}
+                              <span
+                                className={cn(
+                                  "font-mono text-xs text-muted-foreground",
+                                  showOwner && key.owner_email && "hidden @4xl:block"
+                                )}
+                              >
+                                {shortUuid(key.uuid)}
+                              </span>
                             </div>
                           </TableCell>
                           {showOwner && (
-                            <TableCell className="max-w-56">
+                            <TableCell className="hidden max-w-56 @4xl:table-cell">
                               <span className="block truncate" title={key.owner_email ?? undefined}>
                                 {key.owner_email ?? "—"}
                               </span>
@@ -251,14 +307,22 @@ export function KeyTable({
                           <TableCell>
                             <TrafficToggle keyItem={key} open={trafficKeyId === key.id} onToggle={trafficToggle(key)} />
                           </TableCell>
-                          <TableCell className="text-muted-foreground tabular-nums">{formatDate(key.created_at)}</TableCell>
+                          <TableCell className="hidden text-muted-foreground tabular-nums @2xl:table-cell">
+                            {formatDate(key.created_at)}
+                          </TableCell>
                           <TableCell className="pr-3">
                             {key.status !== "revoked" && (
                               <div className="flex justify-end gap-1">
                                 {key.status === "active" && (
-                                  <Button size="sm" className={connectClass} onClick={() => setOpenKeyId(key.id)}>
+                                  <Button
+                                    size="sm"
+                                    className={connectClass}
+                                    title="Подключить"
+                                    aria-label="Подключить"
+                                    onClick={() => setOpenKeyId(key.id)}
+                                  >
                                     <Link2 />
-                                    Подключить
+                                    <span className="hidden @2xl:inline">Подключить</span>
                                   </Button>
                                 )}
                                 <Button
@@ -288,7 +352,7 @@ export function KeyTable({
                 </Table>
               </div>
             )}
-            <div className={cn("grid gap-3 @lg:grid-cols-2 @4xl:grid-cols-3", !cardsOnly && "@4xl:hidden")}>
+            <div className={cn("grid gap-3 @lg:grid-cols-2 @4xl:grid-cols-3", isTable && "@xl:hidden")}>
               {rendered.map((key) => (
                 <article
                   key={key.id}

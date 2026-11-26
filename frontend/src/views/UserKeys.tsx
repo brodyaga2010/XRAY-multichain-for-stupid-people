@@ -93,6 +93,8 @@ export function UserKeys({
       <KeyTable
         keys={filteredKeys}
         showOwner
+        defaultView="table"
+        viewStorageKey="keys-view:admin-all"
         onRevoke={revoke}
         loadTraffic={api.adminKeyTraffic}
         showHeader={false}
@@ -128,7 +130,7 @@ export function UserKeys({
     <div className="grid items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
       <KeyTable
         keys={filteredKeys}
-        cardsOnly
+        viewStorageKey="keys-view:own"
         loadTraffic={api.ownKeyTraffic}
         title="Мои устройства"
         titleExtra={

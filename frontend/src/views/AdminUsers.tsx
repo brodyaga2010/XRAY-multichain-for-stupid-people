@@ -565,7 +565,7 @@ export function AdminUsers({
                 keys={openKeys}
                 onRevoke={(id) => mutate(() => api.adminRevokeKey(id), "Не удалось отозвать ключ")}
                 autoOpenKeyId={newKeyId}
-                cardsOnly
+                viewStorageKey="keys-view:admin-user"
                 loadTraffic={api.adminKeyTraffic}
               />
               </div>
